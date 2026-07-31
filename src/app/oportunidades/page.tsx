@@ -2,17 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-type Oportunidade = {
-  id: string;
-  proprietario_nome: string;
-  telefone: string;
-  cidade: string;
-  veiculo_informado: string;
-  placa: string;
-  origem: string;
-  status: string;
-  created_at: string;
-};
+import type { Oportunidade } from "@/types/oportunidade";
+import StatusBadge from "@/components/oportunidades/StatusBadge";
 export default function OportunidadesPage() {
   const [showForm, setShowForm] = useState(false);
 
@@ -354,9 +345,7 @@ useEffect(() => {
 </div>
 
         <div className="text-right">
-  <span className="inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-    {oportunidade.status}
-  </span>
+  <StatusBadge status={oportunidade.status} />
 
   <p className="mt-2 text-sm font-medium">
     {oportunidade.cidade}
