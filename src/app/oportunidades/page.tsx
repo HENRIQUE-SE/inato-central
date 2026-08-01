@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Oportunidade } from "@/types/oportunidade";
-import StatusBadge from "@/components/oportunidades/StatusBadge";
-import ActionButtons from "@/components/oportunidades/ActionButtons";
+import CardOportunidade from "@/components/oportunidades/CardOportunidade";
+import FormOportunidade from "@/components/oportunidades/FormOportunidade";
 export default function OportunidadesPage() {
   const [showForm, setShowForm] = useState(false);
 
@@ -131,137 +131,25 @@ useEffect(() => {
         </div>
 
         {/* FORMULÁRIO */}
-        {showForm && (
-          <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-6">
-              <h2 className="text-lg font-semibold">
-                Nova oportunidade
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Registre os dados iniciais do proprietário e do veículo.
-              </p>
-            </div>
-
-            <div className="grid gap-5 md:grid-cols-2">
-
-              {/* PROPRIETÁRIO */}
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Nome do proprietário
-                </label>
-
-                <input
-                  type="text"
-                  placeholder="Ex.: João da Silva"
-                  value={proprietarioNome}
-                  onChange={(e) => setProprietarioNome(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
-                />
-              </div>
-
-              {/* TELEFONE */}
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Telefone
-                </label>
-
-                <input
-                  type="tel"
-                  placeholder="(34) 99999-9999"
-                  value={telefone}
-                  onChange={(e) => setTelefone(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
-                />
-              </div>
-
-              {/* CIDADE */}
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Cidade
-                </label>
-
-                <input
-                  type="text"
-                  value={cidade}
-                  onChange={(e) => setCidade(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
-                />
-              </div>
-
-              {/* VEÍCULO */}
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Veículo informado
-                </label>
-
-                <input
-                  type="text"
-                  placeholder="Ex.: Chevrolet Onix 1.0"
-                  value={veiculoInformado}
-                  onChange={(e) => setVeiculoInformado(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
-                />
-              </div>
-
-              {/* PLACA */}
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Placa
-                </label>
-
-                <input
-                  type="text"
-                  placeholder="ABC1D23"
-                  value={placa}
-                  onChange={(e) => setPlaca(e.target.value.toUpperCase())}
-                  maxLength={7}
-                  className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm uppercase outline-none transition focus:border-slate-900"
-                />
-              </div>
-
-              {/* ORIGEM */}
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Origem
-                </label>
-
-                <select
-                  value={origem}
-                  onChange={(e) => setOrigem(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-slate-900"
-                >
-                  <option>Instagram</option>
-                  <option>Facebook</option>
-                  <option>Indicação</option>
-                  <option>Site</option>
-                  <option>Outro</option>
-                </select>
-              </div>
-            </div>
-
-            {/* BOTÕES */}
-            <div className="mt-6 flex justify-end gap-3">
-
-              <button
-                onClick={() => setShowForm(false)}
-                disabled={salvando}
-                className="rounded-lg border border-slate-300 px-5 py-3 text-sm font-semibold transition hover:bg-slate-50 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-
-              <button
-                onClick={salvarOportunidade}
-                disabled={salvando}
-                className="rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {salvando ? "Salvando..." : "Salvar oportunidade"}
-              </button>
-
-            </div>
-          </section>
-        )}
+{showForm && (
+  <FormOportunidade
+    proprietarioNome={proprietarioNome}
+    telefone={telefone}
+    cidade={cidade}
+    veiculoInformado={veiculoInformado}
+    placa={placa}
+    origem={origem}
+    salvando={salvando}
+    onProprietarioNomeChange={setProprietarioNome}
+    onTelefoneChange={setTelefone}
+    onCidadeChange={setCidade}
+    onVeiculoInformadoChange={setVeiculoInformado}
+    onPlacaChange={setPlaca}
+    onOrigemChange={setOrigem}
+    onCancelar={() => setShowForm(false)}
+    onSalvar={salvarOportunidade}
+  />
+)}
 
         {/* FILTROS */}
         <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -327,42 +215,12 @@ useEffect(() => {
 ) : (
   <div className="divide-y divide-slate-200">
     {oportunidades.map((oportunidade) => (
-      <div
-        key={oportunidade.id}
-        className="flex items-center justify-between p-5 hover:bg-slate-50"
-      >
-        <div>
-  <h3 className="font-semibold">
-    {oportunidade.proprietario_nome}
-  </h3>
-
-  <p className="text-sm text-slate-500">
-    {oportunidade.veiculo_informado}
-  </p>
-
-  <p className="mt-1 text-xs font-medium text-slate-400">
-    Placa: {oportunidade.placa}
-  </p>
-</div>
-
-        <div className="text-right">
-  <StatusBadge status={oportunidade.status} />
-
-  <p className="mt-2 text-sm font-medium">
-    {oportunidade.cidade}
-  </p>
-
-  <p className="text-xs text-slate-500">
-    {oportunidade.origem}
-  </p>
-<ActionButtons
-  onVer={() => alert("Visualização em desenvolvimento.")}
-  onEditar={() => alert("Edição em desenvolvimento.")}
-  onExcluir={() => excluirOportunidade(oportunidade.id)}
-/>
-</div>
-      </div>
-    ))}
+  <CardOportunidade
+    key={oportunidade.id}
+    oportunidade={oportunidade}
+    onExcluir={excluirOportunidade}
+  />
+))}
   </div>
 )}
 
