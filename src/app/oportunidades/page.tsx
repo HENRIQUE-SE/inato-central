@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Oportunidade } from "@/types/oportunidade";
 import StatusBadge from "@/components/oportunidades/StatusBadge";
+import ActionButtons from "@/components/oportunidades/ActionButtons";
 export default function OportunidadesPage() {
   const [showForm, setShowForm] = useState(false);
 
@@ -354,22 +355,11 @@ useEffect(() => {
   <p className="text-xs text-slate-500">
     {oportunidade.origem}
   </p>
-  <div className="mt-3 flex justify-end gap-2">
-  <button className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium hover:bg-slate-100">
-    👁 Ver
-  </button>
-
-  <button className="rounded-lg border border-blue-300 px-3 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50">
-    ✏ Editar
-  </button>
-
-  <button
-  onClick={() => excluirOportunidade(oportunidade.id)}
-  className="rounded-lg border border-red-300 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
->
-  🗑 Excluir
-</button>
-</div>
+<ActionButtons
+  onVer={() => alert("Visualização em desenvolvimento.")}
+  onEditar={() => alert("Edição em desenvolvimento.")}
+  onExcluir={() => excluirOportunidade(oportunidade.id)}
+/>
 </div>
       </div>
     ))}
