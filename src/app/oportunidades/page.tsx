@@ -16,6 +16,8 @@ export default function OportunidadesPage() {
   const [origem, setOrigem] = useState("Instagram");
   const [salvando, setSalvando] = useState(false);
 const [oportunidades, setOportunidades] = useState<Oportunidade[]>([]);
+const [oportunidadeEmEdicao, setOportunidadeEmEdicao] =
+  useState<Oportunidade | null>(null);
 async function carregarOportunidades() {
   const { data, error } = await supabase
     .from("oportunidades")
@@ -28,6 +30,18 @@ async function carregarOportunidades() {
   }
 
   setOportunidades(data ?? []);
+}
+function iniciarEdicao(oportunidade: Oportunidade) {
+  setOportunidadeEmEdicao(oportunidade);
+
+  setProprietarioNome(oportunidade.proprietario_nome);
+  setTelefone(oportunidade.telefone);
+  setCidade(oportunidade.cidade);
+  setVeiculoInformado(oportunidade.veiculo_informado);
+  setPlaca(oportunidade.placa);
+  setOrigem(oportunidade.origem);
+
+  setShowForm(true);
 }
 async function excluirOportunidade(id: string) {
   const confirmar = confirm(
@@ -70,17 +84,24 @@ useEffect(() => {
 
     setSalvando(true);
 
-    const { error } = await supabase.from("oportunidades").insert([
-      {
-        proprietario_nome: proprietarioNome,
-        telefone: telefone,
-        cidade: cidade,
-        veiculo_informado: veiculoInformado,
-        placa: placa,
-        origem: origem,
-        status: "novo",
-      },
-    ]);
+    const dadosOportunidade = {
+  proprietario_nome: proprietarioNome,
+  telefone,
+  cidade,
+  veiculo_informado: veiculoInformado,
+  placa,
+  origem,
+  status: oportunidadeEmEdicao?.status ?? "novo",
+};
+
+const { error } = oportunidadeEmEdicao
+  ? await supabase
+      .from("oportunidades")
+      .update(dadosOportunidade)
+      .eq("id", oportunidadeEmEdicao.id)
+  : await supabase
+      .from("oportunidades")
+      .insert([dadosOportunidade]);
 
     setSalvando(false);
 
@@ -98,6 +119,7 @@ useEffect(() => {
     setPlaca("");
     setOrigem("Instagram");
 
+setOportunidadeEmEdicao(null);
     setShowForm(false);
   }
 
@@ -146,7 +168,10 @@ useEffect(() => {
     onVeiculoInformadoChange={setVeiculoInformado}
     onPlacaChange={setPlaca}
     onOrigemChange={setOrigem}
-    onCancelar={() => setShowForm(false)}
+    onCancelar={() => {
+  setOportunidadeEmEdicao(null);
+  setShowForm(false);
+}}
     onSalvar={salvarOportunidade}
   />
 )}
@@ -216,10 +241,11 @@ useEffect(() => {
   <div className="divide-y divide-slate-200">
     {oportunidades.map((oportunidade) => (
   <CardOportunidade
-    key={oportunidade.id}
-    oportunidade={oportunidade}
-    onExcluir={excluirOportunidade}
-  />
+  key={oportunidade.id}
+  oportunidade={oportunidade}
+  onEditar={iniciarEdicao}
+  onExcluir={excluirOportunidade}
+/>
 ))}
   </div>
 )}

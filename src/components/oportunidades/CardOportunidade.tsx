@@ -4,11 +4,13 @@ import ActionButtons from "./ActionButtons";
 
 type CardOportunidadeProps = {
   oportunidade: Oportunidade;
+  onEditar: (oportunidade: Oportunidade) => void;
   onExcluir: (id: string) => void;
 };
 
 export default function CardOportunidade({
   oportunidade,
+  onEditar,
   onExcluir,
 }: CardOportunidadeProps) {
   return (
@@ -37,7 +39,7 @@ export default function CardOportunidade({
 
       <ActionButtons
         onVer={() => alert("Visualização em desenvolvimento.")}
-        onEditar={() => alert("Edição em desenvolvimento.")}
+       onEditar={() => onEditar(oportunidade)}
         onExcluir={() => onExcluir(oportunidade.id)}
       />
     </div>
