@@ -11,3 +11,8 @@ export type {
   Empresa,
   Unidade,
 } from "./types";
+export {
+  obterContextoOrganizacional,
+  obterEmpresaAtual,
+  obterUnidadeAtual,
+} from "./service";
