@@ -9,3 +9,5 @@ export type Oportunidade = {
   status: string;
   created_at: string;
 };
+
+export type DadosOportunidade = Omit<Oportunidade, "id" | "created_at">;

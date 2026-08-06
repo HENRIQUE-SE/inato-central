@@ -1,5 +1,8 @@
 import { supabase } from "@/lib/supabase";
-import type { Oportunidade } from "@/types/oportunidade";
+import type {
+  DadosOportunidade,
+  Oportunidade,
+} from "@/types/oportunidade";
 
 export type ListarOportunidadesParametros = {
   pagina?: number;
@@ -53,4 +56,49 @@ export async function listarOportunidades({
     pagina,
     itensPorPagina,
   };
+}
+
+export async function criarOportunidade(
+  dados: DadosOportunidade
+): Promise<Oportunidade> {
+  const { data, error } = await supabase
+    .from("oportunidades")
+    .insert([dados])
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data as Oportunidade;
+}
+
+export async function atualizarOportunidade(
+  id: string,
+  dados: DadosOportunidade
+): Promise<Oportunidade> {
+  const { data, error } = await supabase
+    .from("oportunidades")
+    .update(dados)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data as Oportunidade;
+}
+
+export async function excluirOportunidade(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("oportunidades")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    throw error;
+  }
 }

@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import {
+  atualizarOportunidade,
+  criarOportunidade,
+  excluirOportunidade,
+  listarOportunidades,
+} from "@/services/oportunidades.service";
 import type { Oportunidade } from "@/types/oportunidade";
 import CardOportunidade from "@/components/oportunidades/CardOportunidade";
 import FormOportunidade from "@/components/oportunidades/FormOportunidade";
@@ -19,17 +24,12 @@ const [oportunidades, setOportunidades] = useState<Oportunidade[]>([]);
 const [oportunidadeEmEdicao, setOportunidadeEmEdicao] =
   useState<Oportunidade | null>(null);
 async function carregarOportunidades() {
-  const { data, error } = await supabase
-    .from("oportunidades")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (error) {
+  try {
+    const { dados } = await listarOportunidades({ itensPorPagina: 1000 });
+    setOportunidades(dados);
+  } catch {
     alert("Não foi possível carregar as oportunidades.");
-    return;
   }
-
-  setOportunidades(data ?? []);
 }
 function iniciarEdicao(oportunidade: Oportunidade) {
   setOportunidadeEmEdicao(oportunidade);
@@ -43,7 +43,7 @@ function iniciarEdicao(oportunidade: Oportunidade) {
 
   setShowForm(true);
 }
-async function excluirOportunidade(id: string) {
+async function excluirOportunidadeSelecionada(id: string) {
   const confirmar = confirm(
     "Tem certeza que deseja excluir esta oportunidade?"
   );
@@ -52,12 +52,9 @@ async function excluirOportunidade(id: string) {
     return;
   }
 
-  const { error } = await supabase
-    .from("oportunidades")
-    .delete()
-    .eq("id", id);
-
-  if (error) {
+  try {
+    await excluirOportunidade(id);
+  } catch {
     alert("Não foi possível excluir a oportunidade.");
     return;
   }
@@ -94,21 +91,22 @@ useEffect(() => {
   status: oportunidadeEmEdicao?.status ?? "novo",
 };
 
-const { error } = oportunidadeEmEdicao
-  ? await supabase
-      .from("oportunidades")
-      .update(dadosOportunidade)
-      .eq("id", oportunidadeEmEdicao.id)
-  : await supabase
-      .from("oportunidades")
-      .insert([dadosOportunidade]);
-
-    setSalvando(false);
-
-    if (error) {
+try {
+  if (oportunidadeEmEdicao) {
+    await atualizarOportunidade(
+      oportunidadeEmEdicao.id,
+      dadosOportunidade
+    );
+  } else {
+    await criarOportunidade(dadosOportunidade);
+  }
+} catch (error) {
+  setSalvando(false);
   alert(JSON.stringify(error, null, 2));
   return;
 }
+
+    setSalvando(false);
 
     alert("Oportunidade salva com sucesso!");
 
@@ -244,7 +242,7 @@ setOportunidadeEmEdicao(null);
   key={oportunidade.id}
   oportunidade={oportunidade}
   onEditar={iniciarEdicao}
-  onExcluir={excluirOportunidade}
+  onExcluir={excluirOportunidadeSelecionada}
 />
 ))}
   </div>
