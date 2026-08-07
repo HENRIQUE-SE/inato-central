@@ -16,7 +16,7 @@ function registro(sobrescrever: Partial<RegistroAuditoria> = {}): RegistroAudito
     recursoId: "oportunidade-1",
     resultado: RESULTADOS_AUDITORIA.SUCESSO,
     origem: ORIGENS_AUDITORIA.USUARIO,
-    detalhes: { perfilCodigo: "administrador", placa: "ABC1D23" },
+    detalhes: { perfilCodigo: "consultor", placa: "ABC1D23" },
     criadoEm: "2026-08-07T12:30:00.000Z",
     ...sobrescrever,
   };
@@ -43,7 +43,7 @@ test("transforma registro persistido, resolve e-mail e extrai perfil e placa", a
     data: "07/08/2026",
     hora: "09:30:00",
     usuario: "charles@inato.com",
-    perfil: "administrador",
+    perfil: "consultor",
     modulo: "Oportunidades",
     acao: "Criou",
     resultado: "Sucesso",
