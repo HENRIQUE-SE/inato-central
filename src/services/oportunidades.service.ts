@@ -3,6 +3,11 @@ import type {
   DadosOportunidade,
   Oportunidade,
 } from "@/types/oportunidade";
+import {
+  registrarAuditoriaAlteracaoOportunidade,
+  registrarAuditoriaCriacaoOportunidade,
+  registrarAuditoriaExclusaoOportunidade,
+} from "./oportunidades.auditoria";
 
 export type ListarOportunidadesParametros = {
   pagina?: number;
@@ -71,7 +76,10 @@ export async function criarOportunidade(
     throw error;
   }
 
-  return data as Oportunidade;
+  const oportunidade = data as Oportunidade;
+  registrarAuditoriaCriacaoOportunidade(oportunidade);
+
+  return oportunidade;
 }
 
 export async function atualizarOportunidade(
@@ -89,16 +97,23 @@ export async function atualizarOportunidade(
     throw error;
   }
 
-  return data as Oportunidade;
+  const oportunidade = data as Oportunidade;
+  registrarAuditoriaAlteracaoOportunidade(oportunidade);
+
+  return oportunidade;
 }
 
 export async function excluirOportunidade(id: string): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("oportunidades")
     .delete()
-    .eq("id", id);
+    .eq("id", id)
+    .select("*")
+    .single();
 
   if (error) {
     throw error;
   }
+
+  registrarAuditoriaExclusaoOportunidade(data as Oportunidade);
 }
