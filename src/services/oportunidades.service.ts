@@ -77,7 +77,7 @@ export async function criarOportunidade(
   }
 
   const oportunidade = data as Oportunidade;
-  registrarAuditoriaCriacaoOportunidade(oportunidade);
+  await registrarAuditoriaCriacaoOportunidade(oportunidade);
 
   return oportunidade;
 }
@@ -98,7 +98,7 @@ export async function atualizarOportunidade(
   }
 
   const oportunidade = data as Oportunidade;
-  registrarAuditoriaAlteracaoOportunidade(oportunidade);
+  await registrarAuditoriaAlteracaoOportunidade(oportunidade);
 
   return oportunidade;
 }
@@ -115,5 +115,5 @@ export async function excluirOportunidade(id: string): Promise<void> {
     throw error;
   }
 
-  registrarAuditoriaExclusaoOportunidade(data as Oportunidade);
+  await registrarAuditoriaExclusaoOportunidade(data as Oportunidade);
 }
