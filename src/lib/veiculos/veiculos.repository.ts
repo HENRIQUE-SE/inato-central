@@ -1,4 +1,9 @@
-import { criarListagemVeiculos, type ListagemVeiculos, type Veiculo } from "@/core/veiculos";
+import {
+  criarListagemVeiculos,
+  type DadosCriacaoVeiculo,
+  type ListagemVeiculos,
+  type Veiculo,
+} from "@/core/veiculos";
 import { supabase } from "@/lib/supabase";
 
 type LinhaVeiculo = {
@@ -30,6 +35,10 @@ type ResultadoConsultaVeiculos = {
 };
 
 type ExecutarConsultaVeiculos = () => Promise<ResultadoConsultaVeiculos>;
+type ResultadoCriacaoVeiculo = { data: LinhaVeiculo | null; error: unknown };
+type ExecutarCriacaoVeiculo = (
+  dados: Record<string, string | number | null>
+) => Promise<ResultadoCriacaoVeiculo>;
 
 function mapearVeiculo(linha: LinhaVeiculo): Veiculo {
   return {
@@ -64,10 +73,43 @@ async function consultarVeiculos(): Promise<ResultadoConsultaVeiculos> {
     .order("criado_em", { ascending: false });
 }
 
+async function inserirVeiculo(
+  dados: Record<string, string | number | null>
+): Promise<ResultadoCriacaoVeiculo> {
+  return supabase.from("veiculos").insert(dados).select("*").single();
+}
+
 export async function listarVeiculosPersistidos(
   executarConsulta: ExecutarConsultaVeiculos = consultarVeiculos
 ): Promise<ListagemVeiculos> {
   const { data, error } = await executarConsulta();
   if (error) throw error;
   return criarListagemVeiculos((data ?? []).map(mapearVeiculo));
+}
+
+export async function criarVeiculoPersistido(
+  dados: DadosCriacaoVeiculo,
+  executarCriacao: ExecutarCriacaoVeiculo = inserirVeiculo
+): Promise<Veiculo> {
+  const registro = {
+    empresa_id: dados.empresaId,
+    unidade_id: dados.unidadeId,
+    oportunidade_id: dados.oportunidadeId,
+    proprietario_nome: dados.proprietarioNome,
+    placa: dados.placa,
+    renavam: dados.renavam,
+    chassi: dados.chassi,
+    marca: dados.marca,
+    modelo: dados.modelo,
+    versao: dados.versao,
+    ano_fabricacao: dados.anoFabricacao,
+    ano_modelo: dados.anoModelo,
+    cor: dados.cor,
+    quilometragem: dados.quilometragem,
+    codigo_fipe: dados.codigoFipe,
+  };
+  const { data, error } = await executarCriacao(registro);
+  if (error) throw error;
+  if (data === null) throw new Error("Veículo não retornado após criação.");
+  return mapearVeiculo(data);
 }

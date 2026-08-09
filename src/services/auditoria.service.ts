@@ -77,6 +77,7 @@ function transformarRegistro(
   usuarioAtual: UsuarioAutenticado | null
 ): AuditoriaItem {
   const instante = new Date(registro.criadoEm);
+  const usuarioEmail = textoDetalhe(registro.detalhes, "usuarioEmail");
 
   return {
     id: registro.id,
@@ -87,8 +88,9 @@ function transformarRegistro(
       second: "2-digit",
       timeZone: "America/Sao_Paulo",
     }),
-    usuario:
-      usuarioAtual !== null && registro.usuarioId === usuarioAtual.id
+    usuario: usuarioEmail !== "—"
+      ? usuarioEmail
+      : usuarioAtual !== null && registro.usuarioId === usuarioAtual.id
         ? usuarioAtual.email || "Usuário autenticado"
         : "Usuário não identificado",
     perfil: textoDetalhe(registro.detalhes, "perfilCodigo"),

@@ -52,6 +52,20 @@ test("transforma registro persistido, resolve e-mail e extrai perfil e placa", a
   });
 });
 
+test("administrador autenticado é identificado pelo snapshot confiável", async () => {
+  const evento = registro({ detalhes: { perfilCodigo: "administrador", placa: "ADM1A23", usuarioEmail: "administrador@inato.test" } });
+  const resultado = await listarAuditoria({}, consultaCom([evento]), async () => ({ id: "outro-visualizador", email: "visualizador@inato.test" }));
+  assert.equal(resultado.dados[0].usuario, "administrador@inato.test");
+  assert.equal(resultado.dados[0].perfil, "administrador");
+});
+
+test("consultor autenticado é identificado mesmo quando administrador consulta", async () => {
+  const evento = registro({ usuarioId: "consultor-id", detalhes: { perfilCodigo: "consultor", placa: "CON1S23", usuarioEmail: "consultor@inato.test" } });
+  const resultado = await listarAuditoria({}, consultaCom([evento]), resolverUsuario);
+  assert.equal(resultado.dados[0].usuario, "consultor@inato.test");
+  assert.equal(resultado.dados[0].perfil, "consultor");
+});
+
 test("calcula total de páginas", async () => {
   assert.equal((await listarAuditoria({}, consultaCom([], 21), resolverUsuario)).totalPaginas, 3);
 });

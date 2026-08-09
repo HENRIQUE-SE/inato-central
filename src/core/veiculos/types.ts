@@ -32,3 +32,7 @@ export type ListagemVeiculos = Readonly<{
   dados: readonly Veiculo[];
   total: number;
 }>;
+
+export type ResultadoValidacaoVeiculo =
+  | { valido: true }
+  | { valido: false; campo: string; mensagem: string };

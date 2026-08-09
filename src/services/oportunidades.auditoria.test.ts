@@ -25,7 +25,7 @@ test("criação usa usuário real, contexto, perfil e persiste", async () => {
   assert.equal(evento.usuarioId, usuario.id); assert.equal(evento.empresaId, contexto.organizacao.empresaId); assert.equal(evento.unidadeId, contexto.organizacao.unidadeId);
   assert.equal(evento.acao, "criar"); assert.equal(evento.resultado, "sucesso"); assert.equal(evento.origem, "usuario");
   assert.equal(evento.modulo, "oportunidades"); assert.equal(evento.recursoTipo, "oportunidade"); assert.equal(evento.recursoId, oportunidade.id);
-  assert.deepEqual(evento.detalhes, { placa: "ABC1D23", proprietario: "Proprietário", veiculo: "Veículo", perfilCodigo: "consultor" });
+  assert.deepEqual(evento.detalhes, { placa: "ABC1D23", proprietario: "Proprietário", veiculo: "Veículo", perfilCodigo: "consultor", usuarioEmail: "usuario@inato.test" });
   assert.equal(listarEventosAuditoria().length, 1); assert.equal(listarEventosAuditoria()[0].usuarioId, null);
 });
 
@@ -35,6 +35,7 @@ test("exclusão persiste o evento", async () => { await registrarAuditoriaExclus
 test("usuário ausente mantém evento em memória sem persistir ou criar identificador falso", async () => {
   await registrarAuditoriaCriacaoOportunidade(oportunidade, { ...dependencias, obterUsuario: async () => null });
   assert.equal(persistidos.length, 0); assert.equal(listarEventosAuditoria().length, 1); assert.equal(listarEventosAuditoria()[0].usuarioId, null);
+  assert.equal("usuarioEmail" in (listarEventosAuditoria()[0].detalhes ?? {}), false);
 });
 
 test("auditoria não contém senha nem token", async () => {

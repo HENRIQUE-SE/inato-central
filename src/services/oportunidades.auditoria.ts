@@ -45,9 +45,11 @@ async function registrar(
     recursoId: oportunidade.id,
     resultado: RESULTADOS_AUDITORIA.SUCESSO,
     origem: ORIGENS_AUDITORIA.USUARIO,
-    detalhes: perfilCodigo === undefined
-      ? detalhes
-      : { ...detalhes, perfilCodigo },
+    detalhes: {
+      ...detalhes,
+      ...(perfilCodigo === undefined ? {} : { perfilCodigo }),
+      ...(usuario?.email ? { usuarioEmail: usuario.email } : {}),
+    },
   });
   if (usuario !== null) {
     await dependencias.persistir({ ...evento, usuarioId: usuario.id });
