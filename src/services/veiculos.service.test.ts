@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { STATUS_VEICULO, type DadosCriacaoVeiculo, type Veiculo } from "@/core/veiculos";
 import type { ContextoAcesso } from "@/core/acesso";
-import { criarVeiculoPersistido, listarVeiculosPersistidos } from "@/lib/veiculos/veiculos.repository";
+import { atualizarVeiculoPersistido, criarVeiculoPersistido, listarVeiculosPersistidos, obterVeiculoPersistidoPorId } from "@/lib/veiculos/veiculos.repository";
 import {
   criarVeiculo,
+  atualizarVeiculo,
   listarVeiculos,
   listarOportunidadesDisponiveisParaVeiculo,
+  obterVeiculoPorId,
+  type DadosFormularioAtualizacaoVeiculo,
   type DadosFormularioVeiculo,
   type DependenciasVeiculos,
 } from "./veiculos.service";
@@ -187,4 +190,46 @@ test("repositório de criação envia e mapeia todos os campos", async () => {
   assert.equal(inserido.oportunidade_id, "o");
   assert.equal(Object.keys(inserido).length, 15);
   assert.equal(resultado.id, "v");
+});
+
+const FORMULARIO_ATUALIZACAO: DadosFormularioAtualizacaoVeiculo = {
+  proprietarioNome: " Proprietário atualizado ", placa: " abc1d23 ", marca: " Marca ",
+  modelo: " Modelo ", versao: " ", anoFabricacao: 2025, anoModelo: 2026,
+  cor: " Branco ", quilometragem: 456, renavam: " ", chassi: " chassi456 ", codigoFipe: " ",
+};
+
+function veiculoAtual(): Veiculo {
+  return veiculo({ empresaId: "empresa-contexto", unidadeId: "unidade-contexto", oportunidadeId: "oportunidade-1", proprietarioNome: "Proprietário", placa: "ABC1D23", renavam: null, chassi: "CHASSI123", marca: "Marca", modelo: "Modelo", versao: null, anoFabricacao: 2025, anoModelo: 2026, cor: "Preto", quilometragem: 123, codigoFipe: null });
+}
+
+function dependenciasAtualizacao(alteracoes: Partial<DependenciasVeiculos> = {}): Partial<DependenciasVeiculos> {
+  const atual = veiculoAtual();
+  return { obterUsuario: async () => ({ id: "usuario-1", email: "usuario@inato.test" }), exigirVisualizacao: async () => CONTEXTO, exigirAlteracao: async () => CONTEXTO, obterPorId: async () => atual, atualizar: async (_id, dados) => ({ ...atual, ...dados, atualizadoEm: "novo" }), auditarAlteracao: async () => undefined, ...alteracoes };
+}
+
+test("obtém veículo com autenticação e permissão", async () => assert.equal((await obterVeiculoPorId("veiculo-1", dependenciasAtualizacao())).id, "veiculo-1"));
+test("obtenção sem permissão é negada", async () => assert.rejects(obterVeiculoPorId("veiculo-1", dependenciasAtualizacao({ exigirVisualizacao: async () => { throw new Error("Acesso não autorizado."); } })), new Error("Acesso não autorizado.")));
+test("veículo inexistente usa mensagem controlada", async () => assert.rejects(obterVeiculoPorId("ausente", dependenciasAtualizacao({ obterPorId: async () => null })), new Error("Veículo não encontrado.")));
+test("atualização normaliza e envia somente campos editáveis", async () => {
+  const recebidos: Record<string, unknown>[] = [];
+  await atualizarVeiculo("veiculo-1", FORMULARIO_ATUALIZACAO, dependenciasAtualizacao({ atualizar: async (_id, dados) => { recebidos.push(dados); return { ...veiculoAtual(), ...dados }; } }));
+  const recebido = recebidos[0]; assert.ok(recebido); assert.equal(recebido.placa, "ABC1D23"); assert.equal(recebido.chassi, "CHASSI456"); assert.equal(recebido.versao, null);
+  for (const campo of ["empresaId", "unidadeId", "oportunidadeId", "status", "id", "criadoEm", "arquivadoEm"]) assert.equal(campo in recebido, false);
+});
+test("validação impede atualização no repository", async () => { let chamado = false; await assert.rejects(atualizarVeiculo("v", { ...FORMULARIO_ATUALIZACAO, placa: " " }, dependenciasAtualizacao({ atualizar: async () => { chamado = true; return veiculoAtual(); } })), new Error("Informe a placa.")); assert.equal(chamado, false); });
+test("falta de permissão impede atualização no repository", async () => { let chamado = false; await assert.rejects(atualizarVeiculo("v", FORMULARIO_ATUALIZACAO, dependenciasAtualizacao({ exigirAlteracao: async () => { throw new Error("Acesso não autorizado."); }, atualizar: async () => { chamado = true; return veiculoAtual(); } })), new Error("Acesso não autorizado.")); assert.equal(chamado, false); });
+test("conflito de unicidade gera mensagem controlada", async () => assert.rejects(atualizarVeiculo("v", FORMULARIO_ATUALIZACAO, dependenciasAtualizacao({ atualizar: async () => { throw { code: "23505" }; } })), new Error("Já existe outro veículo com esses dados.")));
+test("erro genérico de update gera mensagem controlada e não audita", async () => { let auditou = false; await assert.rejects(atualizarVeiculo("v", FORMULARIO_ATUALIZACAO, dependenciasAtualizacao({ atualizar: async () => { throw new Error("Supabase"); }, auditarAlteracao: async () => { auditou = true; } })), new Error("Não foi possível atualizar o veículo.")); assert.equal(auditou, false); });
+test("auditoria ocorre após update e recebe campos alterados", async () => { const ordem: string[] = []; let campos: readonly string[] = []; await atualizarVeiculo("v", FORMULARIO_ATUALIZACAO, dependenciasAtualizacao({ atualizar: async (_id, dados) => { ordem.push("update"); return { ...veiculoAtual(), ...dados }; }, auditarAlteracao: async (_v, alterados) => { ordem.push("auditoria"); campos = alterados; } })); assert.deepEqual(ordem, ["update", "auditoria"]); assert.deepEqual(campos, ["proprietarioNome", "cor", "quilometragem", "chassi"]); });
+
+test("repositório obtém por id e mapeia todos os campos", async () => {
+  const atual = veiculoAtual();
+  const resultado = await obterVeiculoPersistidoPorId("v", async () => ({ data: { id: atual.id, empresa_id: atual.empresaId, unidade_id: atual.unidadeId, oportunidade_id: atual.oportunidadeId, proprietario_nome: atual.proprietarioNome, placa: atual.placa, renavam: atual.renavam, chassi: atual.chassi, marca: atual.marca, modelo: atual.modelo, versao: atual.versao, ano_fabricacao: atual.anoFabricacao, ano_modelo: atual.anoModelo, cor: atual.cor, quilometragem: atual.quilometragem, codigo_fipe: atual.codigoFipe, status: atual.status, criado_em: atual.criadoEm, atualizado_em: atual.atualizadoEm, arquivado_em: atual.arquivadoEm }, error: null }));
+  assert.deepEqual(resultado, atual);
+});
+test("repositório atualiza somente campos editáveis, inclui atualizado_em e mapeia retorno", async () => {
+  const atual = veiculoAtual(); const captura: { valor: Record<string, string | number | null> | null } = { valor: null };
+  const dados = { proprietarioNome: "Novo", placa: atual.placa, marca: atual.marca, modelo: atual.modelo, versao: null, anoFabricacao: 2025, anoModelo: 2026, cor: atual.cor, quilometragem: 500, renavam: null, chassi: null, codigoFipe: null };
+  const resultado = await atualizarVeiculoPersistido(atual.id, dados, async (_id, registro) => { captura.valor = registro; return { data: { id: atual.id, empresa_id: atual.empresaId, unidade_id: atual.unidadeId, oportunidade_id: atual.oportunidadeId, proprietario_nome: dados.proprietarioNome, placa: dados.placa, renavam: dados.renavam, chassi: dados.chassi, marca: dados.marca, modelo: dados.modelo, versao: dados.versao, ano_fabricacao: dados.anoFabricacao, ano_modelo: dados.anoModelo, cor: dados.cor, quilometragem: dados.quilometragem, codigo_fipe: dados.codigoFipe, status: atual.status, criado_em: atual.criadoEm, atualizado_em: "novo", arquivado_em: null }, error: null }; });
+  const enviado = captura.valor; assert.ok(enviado); assert.equal(typeof enviado.atualizado_em, "string"); assert.equal("empresa_id" in enviado, false); assert.equal("oportunidade_id" in enviado, false); assert.equal("status" in enviado, false); assert.equal(resultado?.atualizadoEm, "novo");
 });

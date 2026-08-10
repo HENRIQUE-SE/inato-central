@@ -63,3 +63,41 @@ export async function registrarAuditoriaCriacaoVeiculo(
     throw new Error("Não foi possível registrar a auditoria do veículo.");
   }
 }
+
+export async function registrarAuditoriaAlteracaoVeiculo(
+  veiculo: Veiculo,
+  camposAlterados: readonly string[],
+  dependencias: DependenciasAuditoriaVeiculos = DEPENDENCIAS_PADRAO
+): Promise<void> {
+  try {
+    const [usuario, contexto] = await Promise.all([
+      dependencias.obterUsuario(),
+      dependencias.obterContextoAcesso(),
+    ]);
+    if (usuario === null || contexto === null) throw new Error("sem contexto");
+    const evento = registrarEventoAuditoria({
+      empresaId: contexto.vinculo.empresaId,
+      unidadeId: contexto.vinculo.unidadeId,
+      usuarioId: usuario.id,
+      modulo: "veiculos",
+      acao: ACOES_AUDITORIA.ALTERAR,
+      recursoTipo: "veiculo",
+      recursoId: veiculo.id,
+      resultado: RESULTADOS_AUDITORIA.SUCESSO,
+      origem: ORIGENS_AUDITORIA.USUARIO,
+      detalhes: {
+        placa: veiculo.placa,
+        proprietario: veiculo.proprietarioNome,
+        marca: veiculo.marca,
+        modelo: veiculo.modelo,
+        status: veiculo.status,
+        perfilCodigo: contexto.perfil.codigo,
+        usuarioEmail: usuario.email,
+        camposAlterados: [...camposAlterados],
+      },
+    });
+    await dependencias.persistir(evento);
+  } catch {
+    throw new Error("Não foi possível registrar a auditoria do veículo.");
+  }
+}

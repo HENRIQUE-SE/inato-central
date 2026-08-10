@@ -1,5 +1,8 @@
 import {
+  detectarCamposAlteradosVeiculo,
+  validarDadosAtualizacaoVeiculo,
   validarDadosCriacaoVeiculo,
+  type DadosAtualizacaoVeiculo,
   type DadosCriacaoVeiculo,
   type ListagemVeiculos,
   type Veiculo,
@@ -25,6 +28,11 @@ export type DadosFormularioVeiculo = {
   codigoFipe: string;
 };
 
+export type DadosFormularioAtualizacaoVeiculo = Omit<
+  DadosFormularioVeiculo,
+  "oportunidadeId"
+>;
+
 export type OportunidadeParaVeiculo = Pick<
   Oportunidade,
   "id" | "proprietario_nome" | "veiculo_informado" | "placa"
@@ -33,10 +41,17 @@ export type OportunidadeParaVeiculo = Pick<
 export type DependenciasVeiculos = {
   listar: () => Promise<ListagemVeiculos>;
   criar: (dados: DadosCriacaoVeiculo) => Promise<Veiculo>;
+  obterPorId: (id: string) => Promise<Veiculo | null>;
+  atualizar: (id: string, dados: DadosAtualizacaoVeiculo) => Promise<Veiculo | null>;
   obterUsuario: () => Promise<UsuarioAutenticado | null>;
   exigirVisualizacao: () => Promise<ContextoAcesso>;
   exigirCriacao: () => Promise<ContextoAcesso>;
+  exigirAlteracao: () => Promise<ContextoAcesso>;
   auditarCriacao: (veiculo: Veiculo) => Promise<void>;
+  auditarAlteracao: (
+    veiculo: Veiculo,
+    camposAlterados: readonly string[]
+  ) => Promise<void>;
   listarOportunidades: () => Promise<Oportunidade[]>;
 };
 
@@ -50,9 +65,30 @@ async function criarPersistido(dados: DadosCriacaoVeiculo): Promise<Veiculo> {
   return criarVeiculoPersistido(dados);
 }
 
+async function obterPersistidoPorId(id: string): Promise<Veiculo | null> {
+  const { obterVeiculoPersistidoPorId } = await import("@/lib/veiculos/veiculos.repository");
+  return obterVeiculoPersistidoPorId(id);
+}
+
+async function atualizarPersistido(
+  id: string,
+  dados: DadosAtualizacaoVeiculo
+): Promise<Veiculo | null> {
+  const { atualizarVeiculoPersistido } = await import("@/lib/veiculos/veiculos.repository");
+  return atualizarVeiculoPersistido(id, dados);
+}
+
 async function auditarCriacao(veiculo: Veiculo): Promise<void> {
   const { registrarAuditoriaCriacaoVeiculo } = await import("./veiculos.auditoria");
   return registrarAuditoriaCriacaoVeiculo(veiculo);
+}
+
+async function auditarAlteracao(
+  veiculo: Veiculo,
+  camposAlterados: readonly string[]
+): Promise<void> {
+  const { registrarAuditoriaAlteracaoVeiculo } = await import("./veiculos.auditoria");
+  return registrarAuditoriaAlteracaoVeiculo(veiculo, camposAlterados);
 }
 
 async function listarOportunidadesPublicas(): Promise<Oportunidade[]> {
@@ -63,10 +99,14 @@ async function listarOportunidadesPublicas(): Promise<Oportunidade[]> {
 const DEPENDENCIAS_PADRAO: DependenciasVeiculos = {
   listar: listarPersistidos,
   criar: criarPersistido,
+  obterPorId: obterPersistidoPorId,
+  atualizar: atualizarPersistido,
   obterUsuario: obterUsuarioAtualAutenticado,
   exigirVisualizacao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_VISUALIZAR),
   exigirCriacao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_CRIAR),
+  exigirAlteracao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_ALTERAR),
   auditarCriacao,
+  auditarAlteracao,
   listarOportunidades: listarOportunidadesPublicas,
 };
 
@@ -79,14 +119,10 @@ function opcional(valor: string): string | null {
   return normalizado || null;
 }
 
-function normalizarDados(
-  dados: DadosFormularioVeiculo,
-  contexto: ContextoAcesso
-): DadosCriacaoVeiculo {
+function normalizarCamposEditaveis(
+  dados: DadosFormularioAtualizacaoVeiculo
+): DadosAtualizacaoVeiculo {
   return {
-    empresaId: contexto.vinculo.empresaId,
-    unidadeId: contexto.vinculo.unidadeId ?? "",
-    oportunidadeId: dados.oportunidadeId.trim(),
     proprietarioNome: dados.proprietarioNome.trim(),
     placa: dados.placa.trim().toUpperCase(),
     marca: dados.marca.trim(),
@@ -100,6 +136,90 @@ function normalizarDados(
     chassi: opcional(dados.chassi)?.toUpperCase() ?? null,
     codigoFipe: opcional(dados.codigoFipe),
   };
+}
+
+function normalizarDados(
+  dados: DadosFormularioVeiculo,
+  contexto: ContextoAcesso
+): DadosCriacaoVeiculo {
+  return {
+    empresaId: contexto.vinculo.empresaId,
+    unidadeId: contexto.vinculo.unidadeId ?? "",
+    oportunidadeId: dados.oportunidadeId.trim(),
+    ...normalizarCamposEditaveis(dados),
+  };
+}
+
+function erroUnicidade(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
+}
+
+export async function obterVeiculoPorId(
+  id: string,
+  complemento: Partial<DependenciasVeiculos> = {}
+): Promise<Veiculo> {
+  const deps = dependencias(complemento);
+  if (await deps.obterUsuario() === null) throw new Error("Acesso não autorizado.");
+  await deps.exigirVisualizacao();
+  try {
+    const veiculo = await deps.obterPorId(id);
+    if (veiculo === null) throw new Error("nao encontrado");
+    return veiculo;
+  } catch {
+    throw new Error("Veículo não encontrado.");
+  }
+}
+
+export async function atualizarVeiculo(
+  id: string,
+  dadosFormulario: DadosFormularioAtualizacaoVeiculo,
+  complemento: Partial<DependenciasVeiculos> = {}
+): Promise<Veiculo> {
+  const deps = dependencias(complemento);
+  if (await deps.obterUsuario() === null) throw new Error("Acesso não autorizado.");
+  await deps.exigirAlteracao();
+
+  let anterior: Veiculo;
+  try {
+    const encontrado = await deps.obterPorId(id);
+    if (encontrado === null) throw new Error("nao encontrado");
+    anterior = encontrado;
+  } catch {
+    throw new Error("Veículo não encontrado.");
+  }
+
+  const dados = normalizarCamposEditaveis(dadosFormulario);
+  const validacao = validarDadosAtualizacaoVeiculo(dados);
+  if (!validacao.valido) throw new Error(validacao.mensagem);
+  const camposAlterados = detectarCamposAlteradosVeiculo(anterior, dados);
+
+  let atualizado: Veiculo | null;
+  try {
+    atualizado = await deps.atualizar(id, dados);
+  } catch (error) {
+    if (erroUnicidade(error)) throw new Error("Já existe outro veículo com esses dados.");
+    throw new Error("Não foi possível atualizar o veículo.");
+  }
+  if (atualizado === null) throw new Error("Veículo não encontrado.");
+  await deps.auditarAlteracao(atualizado, camposAlterados);
+  return atualizado;
+}
+
+export async function obterOportunidadeOrigemDoVeiculo(
+  oportunidadeId: string,
+  complemento: Partial<DependenciasVeiculos> = {}
+): Promise<OportunidadeParaVeiculo | null> {
+  const deps = dependencias(complemento);
+  await deps.exigirVisualizacao();
+  try {
+    const oportunidades = await deps.listarOportunidades();
+    const oportunidade = oportunidades.find(({ id }) => id === oportunidadeId);
+    if (!oportunidade) return null;
+    const { id, proprietario_nome, veiculo_informado, placa } = oportunidade;
+    return { id, proprietario_nome, veiculo_informado, placa };
+  } catch {
+    return null;
+  }
 }
 
 export async function listarVeiculos(

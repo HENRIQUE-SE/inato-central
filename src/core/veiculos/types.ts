@@ -28,6 +28,24 @@ export type DadosCriacaoVeiculo = Omit<
   "id" | "status" | "criadoEm" | "atualizadoEm" | "arquivadoEm"
 >;
 
+export type DadosAtualizacaoVeiculo = Pick<
+  Veiculo,
+  | "proprietarioNome"
+  | "placa"
+  | "marca"
+  | "modelo"
+  | "versao"
+  | "anoFabricacao"
+  | "anoModelo"
+  | "cor"
+  | "quilometragem"
+  | "renavam"
+  | "chassi"
+  | "codigoFipe"
+>;
+
+export type CampoAtualizavelVeiculo = keyof DadosAtualizacaoVeiculo;
+
 export type ListagemVeiculos = Readonly<{
   dados: readonly Veiculo[];
   total: number;

@@ -1,5 +1,6 @@
 import {
   criarListagemVeiculos,
+  type DadosAtualizacaoVeiculo,
   type DadosCriacaoVeiculo,
   type ListagemVeiculos,
   type Veiculo,
@@ -39,6 +40,12 @@ type ResultadoCriacaoVeiculo = { data: LinhaVeiculo | null; error: unknown };
 type ExecutarCriacaoVeiculo = (
   dados: Record<string, string | number | null>
 ) => Promise<ResultadoCriacaoVeiculo>;
+type ResultadoVeiculo = { data: LinhaVeiculo | null; error: unknown };
+type ExecutarObtencaoVeiculo = (id: string) => Promise<ResultadoVeiculo>;
+type ExecutarAtualizacaoVeiculo = (
+  id: string,
+  dados: Record<string, string | number | null>
+) => Promise<ResultadoVeiculo>;
 
 function mapearVeiculo(linha: LinhaVeiculo): Veiculo {
   return {
@@ -79,6 +86,28 @@ async function inserirVeiculo(
   return supabase.from("veiculos").insert(dados).select("*").single();
 }
 
+async function consultarVeiculoPorId(id: string): Promise<ResultadoVeiculo> {
+  return supabase
+    .from("veiculos")
+    .select("*")
+    .eq("id", id)
+    .is("arquivado_em", null)
+    .maybeSingle();
+}
+
+async function atualizarVeiculo(
+  id: string,
+  dados: Record<string, string | number | null>
+): Promise<ResultadoVeiculo> {
+  return supabase
+    .from("veiculos")
+    .update(dados)
+    .eq("id", id)
+    .is("arquivado_em", null)
+    .select("*")
+    .maybeSingle();
+}
+
 export async function listarVeiculosPersistidos(
   executarConsulta: ExecutarConsultaVeiculos = consultarVeiculos
 ): Promise<ListagemVeiculos> {
@@ -112,4 +141,38 @@ export async function criarVeiculoPersistido(
   if (error) throw error;
   if (data === null) throw new Error("Veículo não retornado após criação.");
   return mapearVeiculo(data);
+}
+
+export async function obterVeiculoPersistidoPorId(
+  id: string,
+  executarObtencao: ExecutarObtencaoVeiculo = consultarVeiculoPorId
+): Promise<Veiculo | null> {
+  const { data, error } = await executarObtencao(id);
+  if (error) throw error;
+  return data === null ? null : mapearVeiculo(data);
+}
+
+export async function atualizarVeiculoPersistido(
+  id: string,
+  dados: DadosAtualizacaoVeiculo,
+  executarAtualizacao: ExecutarAtualizacaoVeiculo = atualizarVeiculo
+): Promise<Veiculo | null> {
+  const registro = {
+    proprietario_nome: dados.proprietarioNome,
+    placa: dados.placa,
+    marca: dados.marca,
+    modelo: dados.modelo,
+    versao: dados.versao,
+    ano_fabricacao: dados.anoFabricacao,
+    ano_modelo: dados.anoModelo,
+    cor: dados.cor,
+    quilometragem: dados.quilometragem,
+    renavam: dados.renavam,
+    chassi: dados.chassi,
+    codigo_fipe: dados.codigoFipe,
+    atualizado_em: new Date().toISOString(),
+  };
+  const { data, error } = await executarAtualizacao(id, registro);
+  if (error) throw error;
+  return data === null ? null : mapearVeiculo(data);
 }

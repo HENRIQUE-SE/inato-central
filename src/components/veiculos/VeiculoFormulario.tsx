@@ -1,13 +1,29 @@
 "use client";
 
 import { useState } from "react";
-import type { DadosFormularioVeiculo, OportunidadeParaVeiculo } from "@/services/veiculos.service";
+import type {
+  DadosFormularioAtualizacaoVeiculo,
+  DadosFormularioVeiculo,
+  OportunidadeParaVeiculo,
+} from "@/services/veiculos.service";
 
-type Props = {
+type PropsCriacao = {
   oportunidades: readonly OportunidadeParaVeiculo[];
+  dadosIniciais?: never;
+  oportunidadeOrigem?: never;
   onCancelar: () => void;
   onSalvar: (dados: DadosFormularioVeiculo) => Promise<void>;
 };
+
+type PropsEdicao = {
+  oportunidades?: never;
+  dadosIniciais: DadosFormularioAtualizacaoVeiculo;
+  oportunidadeOrigem: string;
+  onCancelar: () => void;
+  onSalvar: (dados: DadosFormularioAtualizacaoVeiculo) => Promise<void>;
+};
+
+type Props = PropsCriacao | PropsEdicao;
 
 const INICIAL = {
   oportunidadeId: "", proprietarioNome: "", placa: "", marca: "", modelo: "",
@@ -15,8 +31,23 @@ const INICIAL = {
   renavam: "", chassi: "", codigoFipe: "",
 };
 
-export default function VeiculoFormulario({ oportunidades, onCancelar, onSalvar }: Props) {
-  const [dados, setDados] = useState(INICIAL);
+export default function VeiculoFormulario(props: Props) {
+  const edicao = props.dadosIniciais !== undefined;
+  const [dados, setDados] = useState(() => edicao ? {
+    oportunidadeId: "",
+    proprietarioNome: props.dadosIniciais.proprietarioNome,
+    placa: props.dadosIniciais.placa,
+    marca: props.dadosIniciais.marca,
+    modelo: props.dadosIniciais.modelo,
+    versao: props.dadosIniciais.versao,
+    anoFabricacao: String(props.dadosIniciais.anoFabricacao),
+    anoModelo: String(props.dadosIniciais.anoModelo),
+    cor: props.dadosIniciais.cor,
+    quilometragem: String(props.dadosIniciais.quilometragem),
+    renavam: props.dadosIniciais.renavam,
+    chassi: props.dadosIniciais.chassi,
+    codigoFipe: props.dadosIniciais.codigoFipe,
+  } : INICIAL);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -25,7 +56,7 @@ export default function VeiculoFormulario({ oportunidades, onCancelar, onSalvar 
   }
 
   function selecionarOportunidade(id: string) {
-    const oportunidade = oportunidades.find((item) => item.id === id);
+    const oportunidade = props.oportunidades?.find((item) => item.id === id);
     setDados((atual) => ({
       ...atual,
       oportunidadeId: id,
@@ -38,14 +69,26 @@ export default function VeiculoFormulario({ oportunidades, onCancelar, onSalvar 
     setSalvando(true);
     setErro("");
     try {
-      await onSalvar({
-        ...dados,
+      const campos: DadosFormularioAtualizacaoVeiculo = {
+        proprietarioNome: dados.proprietarioNome,
+        placa: dados.placa,
+        marca: dados.marca,
+        modelo: dados.modelo,
+        versao: dados.versao,
         anoFabricacao: dados.anoFabricacao === "" ? Number.NaN : Number(dados.anoFabricacao),
         anoModelo: dados.anoModelo === "" ? Number.NaN : Number(dados.anoModelo),
+        cor: dados.cor,
         quilometragem: dados.quilometragem === "" ? Number.NaN : Number(dados.quilometragem),
-      });
+        renavam: dados.renavam,
+        chassi: dados.chassi,
+        codigoFipe: dados.codigoFipe,
+      };
+      if (edicao) await props.onSalvar(campos);
+      else await props.onSalvar({ oportunidadeId: dados.oportunidadeId, ...campos });
     } catch (error) {
-      setErro(error instanceof Error ? error.message : "Não foi possível cadastrar o veículo.");
+      setErro(error instanceof Error ? error.message : edicao
+        ? "Não foi possível atualizar o veículo."
+        : "Não foi possível cadastrar o veículo.");
       setSalvando(false);
     }
   }
@@ -53,16 +96,18 @@ export default function VeiculoFormulario({ oportunidades, onCancelar, onSalvar 
   const campo = "w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-slate-900";
   return (
     <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold">Novo veículo</h2>
-      <p className="mt-1 text-sm text-slate-500">Vincule uma oportunidade e complete os dados automotivos.</p>
+      <h2 className="text-lg font-semibold">{edicao ? "Editar veículo" : "Novo veículo"}</h2>
+      <p className="mt-1 text-sm text-slate-500">{edicao ? "Atualize os dados permitidos do veículo." : "Vincule uma oportunidade e complete os dados automotivos."}</p>
       {erro && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
       <div className="mt-6 grid gap-5 md:grid-cols-2">
-        <label className="md:col-span-2 text-sm font-medium">Oportunidade de origem *
+        {edicao ? <div className="md:col-span-2 text-sm font-medium">Oportunidade de origem
+          <p className="mt-2 rounded-lg bg-slate-50 px-4 py-3 font-normal text-slate-700">{props.oportunidadeOrigem}</p>
+        </div> : <label className="md:col-span-2 text-sm font-medium">Oportunidade de origem *
           <select value={dados.oportunidadeId} onChange={(e) => selecionarOportunidade(e.target.value)} className={`mt-2 ${campo}`}>
             <option value="">Selecione uma oportunidade</option>
-            {oportunidades.map((o) => <option key={o.id} value={o.id}>{o.proprietario_nome} — {o.veiculo_informado} — {o.placa}</option>)}
+            {props.oportunidades.map((o) => <option key={o.id} value={o.id}>{o.proprietario_nome} — {o.veiculo_informado} — {o.placa}</option>)}
           </select>
-        </label>
+        </label>}
         <Campo rotulo="Proprietário *" valor={dados.proprietarioNome} onChange={(v) => alterar("proprietarioNome", v)} />
         <Campo rotulo="Placa *" valor={dados.placa} onChange={(v) => alterar("placa", v)} />
         <Campo rotulo="Marca *" valor={dados.marca} onChange={(v) => alterar("marca", v)} />
@@ -77,8 +122,8 @@ export default function VeiculoFormulario({ oportunidades, onCancelar, onSalvar 
         <Campo rotulo="Código FIPE" valor={dados.codigoFipe} onChange={(v) => alterar("codigoFipe", v)} />
       </div>
       <div className="mt-6 flex justify-end gap-3">
-        <button type="button" disabled={salvando} onClick={onCancelar} className="rounded-lg border border-slate-300 px-5 py-3 text-sm font-semibold disabled:opacity-50">Cancelar</button>
-        <button type="button" disabled={salvando} onClick={salvar} className="rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{salvando ? "Salvando..." : "Salvar veículo"}</button>
+        <button type="button" disabled={salvando} onClick={props.onCancelar} className="rounded-lg border border-slate-300 px-5 py-3 text-sm font-semibold disabled:opacity-50">Cancelar</button>
+        <button type="button" disabled={salvando} onClick={salvar} className="rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{salvando ? "Salvando..." : edicao ? "Salvar alterações" : "Salvar veículo"}</button>
       </div>
     </section>
   );

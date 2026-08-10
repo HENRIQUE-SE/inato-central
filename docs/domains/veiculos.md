@@ -95,4 +95,36 @@ Cada criação persistida registra evento `veiculos`/`criar`, com resultado `suc
 
 ## RLS de criação e unicidade da origem
 
-A migração da Sprint 14 adiciona unicidade parcial de `oportunidade_id` para registros não arquivados e uma política de `INSERT` para `authenticated`. A criação persistente exige simultaneamente autenticação, vínculo organizacional ativo, unidade definida, mesma empresa, mesma unidade, permissão `oportunidades.criar` pertencente exatamente ao perfil do vínculo ativo e Oportunidade existente. A associação com `oportunidades.criar` é transitória até existirem permissões próprias do módulo Veículos. Como Oportunidades ainda não persiste empresa ou unidade, a RLS não inventa uma validação organizacional impossível para essa tabela. Não existem políticas de atualização ou exclusão.
+A migração da Sprint 14 adiciona unicidade parcial de `oportunidade_id` para registros não arquivados e uma política de `INSERT` para `authenticated`. A criação persistente exige simultaneamente autenticação, vínculo organizacional ativo, unidade definida, mesma empresa, mesma unidade, permissão `oportunidades.criar` pertencente exatamente ao perfil do vínculo ativo e Oportunidade existente. A associação com `oportunidades.criar` é transitória até existirem permissões próprias do módulo Veículos. Como Oportunidades ainda não persiste empresa ou unidade, a RLS não inventa uma validação organizacional impossível para essa tabela. Não existe política de exclusão.
+
+## Consulta individual
+
+A rota `/veiculos/[id]` apresenta o Veículo individual sem expor empresa, unidade, UUIDs técnicos ou arquivamento. Exibe os dados automotivos, proprietário, status, Oportunidade de origem em formato amigável e datas de criação e atualização. Renavam, chassi e código FIPE aparecem somente quando informados. Identificador inexistente ou inacessível resulta em `Veículo não encontrado.`.
+
+## Edição em preparação
+
+Durante a fase `em_preparacao`, a página individual permite editar exclusivamente `proprietarioNome`, `placa`, `marca`, `modelo`, `versao`, `anoFabricacao`, `anoModelo`, `cor`, `quilometragem`, `renavam`, `chassi` e `codigoFipe`. O formulário de criação é reutilizado em modo de edição. Identificador, empresa, unidade, Oportunidade de origem, status, criação e arquivamento são imutáveis nesse fluxo.
+
+A atualização reutiliza as regras de normalização e validação da criação. O contrato `DadosAtualizacaoVeiculo` contém somente os campos editáveis. O repositório envia somente essas colunas, atualiza `atualizado_em`, restringe o registro a `arquivado_em is null` e devolve o Veículo mapeado.
+
+A imutabilidade estrutural possui proteção dupla. Na aplicação, `DadosAtualizacaoVeiculo` não aceita `id`, `empresaId`, `unidadeId`, `oportunidadeId`, `status`, `criadoEm` ou `arquivadoEm`. No banco, um trigger `BEFORE UPDATE` rejeita qualquer alteração de `id`, `empresa_id`, `unidade_id`, `oportunidade_id`, `status`, `criado_em` ou `arquivado_em`, usando comparação `IS DISTINCT FROM`. `atualizado_em` e os campos operacionais editáveis permanecem atualizáveis.
+
+## Autorização da consulta e edição
+
+A consulta individual exige autenticação e `oportunidades.visualizar`. A edição exige autenticação e `oportunidades.alterar` na interface, no serviço e na política RLS. Administrador e Consultor visualizam e editam; Teste visualiza sem editar; Financeiro não acessa. A associação continua transitória e não cria permissões novas.
+
+## RLS de atualização
+
+A migração da Sprint 15 cria uma política `UPDATE` somente para `authenticated`, com `USING` e `WITH CHECK`. Ambos exigem `arquivado_em is null`, `auth.uid()` não nulo, vínculo ativo, empresa correspondente, unidade definida e correspondente e a permissão transitória `oportunidades.alterar` pertencente ao perfil do vínculo. Dessa forma, um Veículo arquivado não pode ser editado e a linha resultante deve permanecer não arquivada. Não há política para `anon`, `DELETE` ou mudança de contexto organizacional. A migração é criada para aplicação separada pelo Product Owner e não é executada pelo Codex.
+
+## Auditoria da alteração
+
+Após persistência bem-sucedida, a atualização registra `veiculos`/`alterar`, resultado `sucesso`, origem `usuario` e o identificador do Veículo. Os detalhes contêm apenas placa, proprietário, marca, modelo, status, perfil, snapshot do e-mail autenticado e `camposAlterados`. Essa lista possui ordem estável e somente nomes de campos editáveis que realmente mudaram. Renavam, chassi, valores anteriores e novos e identificadores organizacionais não são registrados.
+
+## Mensagens controladas
+
+Falhas de carregamento, ausência do Veículo e falhas de atualização não expõem mensagens técnicas do Supabase. Conflitos de placa, Renavam ou chassi são apresentados como `Já existe outro veículo com esses dados.`.
+
+## Fora do escopo da edição atual
+
+Mudança de status, fotos, checklist, histórico, vistoria, venda, arquivamento e exclusão permanecem não implementados. A Oportunidade de origem não pode ser modificada.

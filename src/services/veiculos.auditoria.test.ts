@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { STATUS_VEICULO, type Veiculo } from "@/core/veiculos";
 import type { ContextoAcesso } from "@/core/acesso";
 import type { RegistroAuditoria } from "@/core/auditoria";
-import { registrarAuditoriaCriacaoVeiculo } from "./veiculos.auditoria";
+import { registrarAuditoriaAlteracaoVeiculo, registrarAuditoriaCriacaoVeiculo } from "./veiculos.auditoria";
 
 const VEICULO: Veiculo = {
   id: "veiculo-1", empresaId: "empresa-1", unidadeId: "unidade-1",
@@ -52,4 +52,23 @@ test("converte falha técnica da persistência da auditoria", async () => {
     obterContextoAcesso: async () => CONTEXTO,
     persistir: async () => { throw new Error("erro técnico"); },
   }), new Error("Não foi possível registrar a auditoria do veículo."));
+});
+
+test("registra alteração com campos alterados e sem dados automotivos sensíveis", async () => {
+  let persistido: RegistroAuditoria | null = null;
+  await registrarAuditoriaAlteracaoVeiculo(VEICULO, ["cor", "quilometragem"], {
+    obterUsuario: async () => ({ id: "usuario-1", email: "usuario@inato.test" }),
+    obterContextoAcesso: async () => CONTEXTO,
+    persistir: async (evento) => { persistido = evento; return evento; },
+  });
+  assert.ok(persistido);
+  const evento: RegistroAuditoria = persistido;
+  assert.equal(evento.acao, "alterar");
+  assert.equal(evento.modulo, "veiculos");
+  assert.equal(evento.recursoId, "veiculo-1");
+  assert.equal(evento.detalhes?.perfilCodigo, "administrador");
+  assert.equal(evento.detalhes?.usuarioEmail, "usuario@inato.test");
+  assert.deepEqual(evento.detalhes?.camposAlterados, ["cor", "quilometragem"]);
+  assert.equal("renavam" in (evento.detalhes ?? {}), false);
+  assert.equal("chassi" in (evento.detalhes ?? {}), false);
 });

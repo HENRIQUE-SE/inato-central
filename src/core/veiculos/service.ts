@@ -1,9 +1,26 @@
 import type {
+  CampoAtualizavelVeiculo,
+  DadosAtualizacaoVeiculo,
   DadosCriacaoVeiculo,
   ListagemVeiculos,
   ResultadoValidacaoVeiculo,
   Veiculo,
 } from "./types";
+
+const CAMPOS_ATUALIZAVEIS: readonly CampoAtualizavelVeiculo[] = [
+  "proprietarioNome",
+  "placa",
+  "marca",
+  "modelo",
+  "versao",
+  "anoFabricacao",
+  "anoModelo",
+  "cor",
+  "quilometragem",
+  "renavam",
+  "chassi",
+  "codigoFipe",
+];
 
 export function criarListagemVeiculos(
   veiculos: readonly Veiculo[]
@@ -16,10 +33,9 @@ function invalido(campo: string, mensagem: string): ResultadoValidacaoVeiculo {
   return { valido: false, campo, mensagem };
 }
 
-export function validarDadosCriacaoVeiculo(
-  dados: DadosCriacaoVeiculo
+function validarDadosEditaveis(
+  dados: DadosAtualizacaoVeiculo
 ): ResultadoValidacaoVeiculo {
-  if (!dados.oportunidadeId.trim()) return invalido("oportunidadeId", "Selecione a oportunidade de origem.");
   if (!dados.proprietarioNome.trim()) return invalido("proprietarioNome", "Informe o proprietário.");
   if (!dados.placa.trim()) return invalido("placa", "Informe a placa.");
   if (!dados.marca.trim()) return invalido("marca", "Informe a marca.");
@@ -35,4 +51,26 @@ export function validarDadosCriacaoVeiculo(
     return invalido("anoModelo", "O ano/modelo deve ser igual ou até um ano posterior ao de fabricação.");
   }
   return { valido: true };
+}
+
+export function validarDadosCriacaoVeiculo(
+  dados: DadosCriacaoVeiculo
+): ResultadoValidacaoVeiculo {
+  if (!dados.oportunidadeId.trim()) return invalido("oportunidadeId", "Selecione a oportunidade de origem.");
+  return validarDadosEditaveis(dados);
+}
+
+export function validarDadosAtualizacaoVeiculo(
+  dados: DadosAtualizacaoVeiculo
+): ResultadoValidacaoVeiculo {
+  return validarDadosEditaveis(dados);
+}
+
+export function detectarCamposAlteradosVeiculo(
+  veiculoAnterior: Veiculo,
+  dadosAtualizados: DadosAtualizacaoVeiculo
+): readonly CampoAtualizavelVeiculo[] {
+  return CAMPOS_ATUALIZAVEIS.filter(
+    (campo) => veiculoAnterior[campo] !== dadosAtualizados[campo]
+  );
 }

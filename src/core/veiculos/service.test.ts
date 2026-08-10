@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { STATUS_VEICULO } from "./constants";
-import { criarListagemVeiculos, validarDadosCriacaoVeiculo } from "./service";
-import type { DadosCriacaoVeiculo, Veiculo } from "./types";
+import { criarListagemVeiculos, detectarCamposAlteradosVeiculo, validarDadosAtualizacaoVeiculo, validarDadosCriacaoVeiculo } from "./service";
+import type { DadosAtualizacaoVeiculo, DadosCriacaoVeiculo, Veiculo } from "./types";
 
 const DADOS: DadosCriacaoVeiculo = {
   empresaId: "empresa-1",
@@ -92,3 +92,19 @@ test("validação não altera o objeto recebido", () => {
   validarDadosCriacaoVeiculo(DADOS);
   assert.deepEqual(DADOS, antes);
 });
+
+const ATUALIZACAO: DadosAtualizacaoVeiculo = {
+  proprietarioNome: DADOS.proprietarioNome, placa: DADOS.placa, marca: DADOS.marca,
+  modelo: DADOS.modelo, versao: DADOS.versao, anoFabricacao: DADOS.anoFabricacao,
+  anoModelo: DADOS.anoModelo, cor: DADOS.cor, quilometragem: DADOS.quilometragem,
+  renavam: DADOS.renavam, chassi: DADOS.chassi, codigoFipe: DADOS.codigoFipe,
+};
+
+test("aprova atualização válida com opcionais nulos", () => assert.deepEqual(validarDadosAtualizacaoVeiculo(ATUALIZACAO), { valido: true }));
+test("atualização rejeita proprietário vazio", () => assert.equal(validarDadosAtualizacaoVeiculo({ ...ATUALIZACAO, proprietarioNome: " " }).valido, false));
+test("atualização rejeita placa vazia", () => assert.equal(validarDadosAtualizacaoVeiculo({ ...ATUALIZACAO, placa: " " }).valido, false));
+test("atualização rejeita quilometragem negativa", () => assert.equal(validarDadosAtualizacaoVeiculo({ ...ATUALIZACAO, quilometragem: -1 }).valido, false));
+test("atualização aplica a mesma regra de anos", () => assert.equal(validarDadosAtualizacaoVeiculo({ ...ATUALIZACAO, anoModelo: 2027 }).valido, false));
+test("validação da atualização não altera a entrada", () => { const antes = structuredClone(ATUALIZACAO); validarDadosAtualizacaoVeiculo(ATUALIZACAO); assert.deepEqual(ATUALIZACAO, antes); });
+test("detecta somente campos efetivamente alterados em ordem estável", () => assert.deepEqual(detectarCamposAlteradosVeiculo(VEICULO, { ...ATUALIZACAO, proprietarioNome: "Outro", cor: "Branco", quilometragem: 456 }), ["proprietarioNome", "cor", "quilometragem"]));
+test("ignora campos que permaneceram iguais", () => assert.deepEqual(detectarCamposAlteradosVeiculo(VEICULO, ATUALIZACAO), []));
