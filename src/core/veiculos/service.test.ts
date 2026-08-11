@@ -110,11 +110,16 @@ test("detecta somente campos efetivamente alterados em ordem estável", () => as
 test("ignora campos que permaneceram iguais", () => assert.deepEqual(detectarCamposAlteradosVeiculo(VEICULO, ATUALIZACAO), []));
 
 test("reconhece pronto_para_anunciar", () => assert.equal(STATUS_VEICULO.PRONTO_PARA_ANUNCIAR, "pronto_para_anunciar"));
-test("permite somente em_preparacao para pronto_para_anunciar", () => assert.deepEqual(validarTransicaoStatusVeiculo(STATUS_VEICULO.EM_PREPARACAO, STATUS_VEICULO.PRONTO_PARA_ANUNCIAR), { valido: true }));
+test("mantém em_preparacao para pronto_para_anunciar", () => assert.deepEqual(validarTransicaoStatusVeiculo(STATUS_VEICULO.EM_PREPARACAO, STATUS_VEICULO.PRONTO_PARA_ANUNCIAR), { valido: true }));
+test("permite pronto_para_anunciar para disponivel", () => assert.deepEqual(validarTransicaoStatusVeiculo(STATUS_VEICULO.PRONTO_PARA_ANUNCIAR, STATUS_VEICULO.DISPONIVEL), { valido: true }));
 test("rejeita origem igual ao destino", () => assert.equal(validarTransicaoStatusVeiculo(STATUS_VEICULO.EM_PREPARACAO, STATUS_VEICULO.EM_PREPARACAO).valido, false));
 test("rejeita regressão para em_preparacao", () => assert.equal(validarTransicaoStatusVeiculo(STATUS_VEICULO.PRONTO_PARA_ANUNCIAR, STATUS_VEICULO.EM_PREPARACAO).valido, false));
 test("rejeita disponível para pronto_para_anunciar", () => assert.equal(validarTransicaoStatusVeiculo(STATUS_VEICULO.DISPONIVEL, STATUS_VEICULO.PRONTO_PARA_ANUNCIAR).valido, false));
-test("rejeita destino diferente do declarado", () => assert.equal(validarTransicaoStatusVeiculo(STATUS_VEICULO.EM_PREPARACAO, STATUS_VEICULO.DISPONIVEL).valido, false));
+test("rejeita em_preparacao para disponivel", () => assert.equal(validarTransicaoStatusVeiculo(STATUS_VEICULO.EM_PREPARACAO, STATUS_VEICULO.DISPONIVEL).valido, false));
+test("rejeita disponível para disponível", () => assert.equal(validarTransicaoStatusVeiculo(STATUS_VEICULO.DISPONIVEL, STATUS_VEICULO.DISPONIVEL).valido, false));
+test("rejeita reservado para disponível", () => assert.equal(validarTransicaoStatusVeiculo(STATUS_VEICULO.RESERVADO, STATUS_VEICULO.DISPONIVEL).valido, false));
+test("rejeita vendido para disponível", () => assert.equal(validarTransicaoStatusVeiculo(STATUS_VEICULO.VENDIDO, STATUS_VEICULO.DISPONIVEL).valido, false));
+test("rejeita cancelado para disponível", () => assert.equal(validarTransicaoStatusVeiculo(STATUS_VEICULO.CANCELADO, STATUS_VEICULO.DISPONIVEL).valido, false));
 test("validação de transição não altera as entradas e tem resultado previsível", () => {
   const atual = STATUS_VEICULO.EM_PREPARACAO; const novo = STATUS_VEICULO.PRONTO_PARA_ANUNCIAR;
   const primeiro = validarTransicaoStatusVeiculo(atual, novo); const segundo = validarTransicaoStatusVeiculo(atual, novo);

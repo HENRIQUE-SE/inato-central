@@ -50,6 +50,10 @@ type ParametrosMarcarProntoParaAnunciar = { p_veiculo_id: string };
 type ExecutarTransicaoProntoParaAnunciar = (
   parametros: ParametrosMarcarProntoParaAnunciar
 ) => Promise<ResultadoVeiculo>;
+type ParametrosMarcarDisponivel = { p_veiculo_id: string };
+type ExecutarTransicaoDisponivel = (
+  parametros: ParametrosMarcarDisponivel
+) => Promise<ResultadoVeiculo>;
 
 function mapearVeiculo(linha: LinhaVeiculo): Veiculo {
   return {
@@ -117,6 +121,14 @@ async function executarTransicaoProntoParaAnunciar(
 ): Promise<ResultadoVeiculo> {
   return supabase
     .rpc("marcar_veiculo_pronto_para_anunciar", parametros)
+    .single();
+}
+
+async function executarTransicaoDisponivel(
+  parametros: ParametrosMarcarDisponivel
+): Promise<ResultadoVeiculo> {
+  return supabase
+    .rpc("marcar_veiculo_disponivel", parametros)
     .single();
 }
 
@@ -192,6 +204,15 @@ export async function atualizarVeiculoPersistido(
 export async function marcarVeiculoProntoParaAnunciarPersistido(
   id: string,
   executarTransicao: ExecutarTransicaoProntoParaAnunciar = executarTransicaoProntoParaAnunciar
+): Promise<Veiculo | null> {
+  const { data, error } = await executarTransicao({ p_veiculo_id: id });
+  if (error) throw error;
+  return data === null ? null : mapearVeiculo(data);
+}
+
+export async function marcarVeiculoDisponivelPersistido(
+  id: string,
+  executarTransicao: ExecutarTransicaoDisponivel = executarTransicaoDisponivel
 ): Promise<Veiculo | null> {
   const { data, error } = await executarTransicao({ p_veiculo_id: id });
   if (error) throw error;

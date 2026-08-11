@@ -24,3 +24,7 @@ test("administrador pode concluir preparação de veículo", () => assert.equal(
 test("consultor pode concluir preparação de veículo", () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.CONSULTOR), CODIGOS_PERMISSAO_ACESSO.VEICULOS_PREPARACAO_CONCLUIR), true));
 test("teste não pode concluir preparação de veículo", () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.TESTE), CODIGOS_PERMISSAO_ACESSO.VEICULOS_PREPARACAO_CONCLUIR), false));
 test("financeiro não pode concluir preparação de veículo", () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.FINANCEIRO), CODIGOS_PERMISSAO_ACESSO.VEICULOS_PREPARACAO_CONCLUIR), false));
+test("administrador pode concluir publicação de veículo", () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR), CODIGOS_PERMISSAO_ACESSO.VEICULOS_PUBLICACAO_CONCLUIR), true));
+test("consultor pode concluir publicação de veículo", () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.CONSULTOR), CODIGOS_PERMISSAO_ACESSO.VEICULOS_PUBLICACAO_CONCLUIR), true));
+test("teste não pode concluir publicação de veículo", () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.TESTE), CODIGOS_PERMISSAO_ACESSO.VEICULOS_PUBLICACAO_CONCLUIR), false));
+test("financeiro não pode concluir publicação de veículo", () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.FINANCEIRO), CODIGOS_PERMISSAO_ACESSO.VEICULOS_PUBLICACAO_CONCLUIR), false));

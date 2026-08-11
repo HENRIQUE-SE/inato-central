@@ -46,17 +46,23 @@ export type DependenciasVeiculos = {
   obterPorId: (id: string) => Promise<Veiculo | null>;
   atualizar: (id: string, dados: DadosAtualizacaoVeiculo) => Promise<Veiculo | null>;
   marcarProntoParaAnunciar: (id: string) => Promise<Veiculo | null>;
+  marcarDisponivel: (id: string) => Promise<Veiculo | null>;
   obterUsuario: () => Promise<UsuarioAutenticado | null>;
   exigirVisualizacao: () => Promise<ContextoAcesso>;
   exigirCriacao: () => Promise<ContextoAcesso>;
   exigirAlteracao: () => Promise<ContextoAcesso>;
   exigirConclusaoPreparacao: () => Promise<ContextoAcesso>;
+  exigirConclusaoPublicacao: () => Promise<ContextoAcesso>;
   auditarCriacao: (veiculo: Veiculo) => Promise<void>;
   auditarAlteracao: (
     veiculo: Veiculo,
     camposAlterados: readonly string[]
   ) => Promise<void>;
   auditarConclusaoPreparacao: (
+    veiculoAnterior: Veiculo,
+    veiculoAtualizado: Veiculo
+  ) => Promise<void>;
+  auditarConclusaoPublicacao: (
     veiculoAnterior: Veiculo,
     veiculoAtualizado: Veiculo
   ) => Promise<void>;
@@ -91,6 +97,11 @@ async function marcarProntoParaAnunciarPersistido(id: string): Promise<Veiculo |
   return marcarVeiculoProntoParaAnunciarPersistido(id);
 }
 
+async function marcarDisponivelPersistido(id: string): Promise<Veiculo | null> {
+  const { marcarVeiculoDisponivelPersistido } = await import("@/lib/veiculos/veiculos.repository");
+  return marcarVeiculoDisponivelPersistido(id);
+}
+
 async function auditarCriacao(veiculo: Veiculo): Promise<void> {
   const { registrarAuditoriaCriacaoVeiculo } = await import("./veiculos.auditoria");
   return registrarAuditoriaCriacaoVeiculo(veiculo);
@@ -112,6 +123,14 @@ async function auditarConclusaoPreparacao(
   return registrarAuditoriaConclusaoPreparacaoVeiculo(veiculoAnterior, veiculoAtualizado);
 }
 
+async function auditarConclusaoPublicacao(
+  veiculoAnterior: Veiculo,
+  veiculoAtualizado: Veiculo
+): Promise<void> {
+  const { registrarAuditoriaConclusaoPublicacaoVeiculo } = await import("./veiculos.auditoria");
+  return registrarAuditoriaConclusaoPublicacaoVeiculo(veiculoAnterior, veiculoAtualizado);
+}
+
 async function listarOportunidadesPublicas(): Promise<Oportunidade[]> {
   const { listarOportunidades } = await import("./oportunidades.service");
   return (await listarOportunidades({ itensPorPagina: 1000 })).dados;
@@ -123,14 +142,17 @@ const DEPENDENCIAS_PADRAO: DependenciasVeiculos = {
   obterPorId: obterPersistidoPorId,
   atualizar: atualizarPersistido,
   marcarProntoParaAnunciar: marcarProntoParaAnunciarPersistido,
+  marcarDisponivel: marcarDisponivelPersistido,
   obterUsuario: obterUsuarioAtualAutenticado,
   exigirVisualizacao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_VISUALIZAR),
   exigirCriacao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_CRIAR),
   exigirAlteracao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_ALTERAR),
   exigirConclusaoPreparacao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.VEICULOS_PREPARACAO_CONCLUIR),
+  exigirConclusaoPublicacao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.VEICULOS_PUBLICACAO_CONCLUIR),
   auditarCriacao,
   auditarAlteracao,
   auditarConclusaoPreparacao,
+  auditarConclusaoPublicacao,
   listarOportunidades: listarOportunidadesPublicas,
 };
 
@@ -270,7 +292,7 @@ export async function marcarVeiculoProntoParaAnunciar(
     anterior.status,
     STATUS_VEICULO.PRONTO_PARA_ANUNCIAR
   );
-  if (!validacao.valido) throw new Error(validacao.mensagem);
+  if (!validacao.valido) throw new Error("O veículo não pode ser marcado como pronto para anunciar.");
 
   let atualizado: Veiculo | null;
   try {
@@ -280,6 +302,43 @@ export async function marcarVeiculoProntoParaAnunciar(
   }
   if (atualizado === null) throw new Error("Não foi possível atualizar o status do veículo.");
   await deps.auditarConclusaoPreparacao(anterior, atualizado);
+  return atualizado;
+}
+
+export async function marcarVeiculoDisponivel(
+  id: string,
+  complemento: Partial<DependenciasVeiculos> = {}
+): Promise<Veiculo> {
+  const deps = dependencias(complemento);
+  if (await deps.obterUsuario() === null) throw new Error("Acesso não autorizado.");
+  await deps.exigirConclusaoPublicacao();
+
+  let anterior: Veiculo;
+  try {
+    const encontrado = await deps.obterPorId(id);
+    if (encontrado === null) throw new Error("não encontrado");
+    anterior = encontrado;
+  } catch {
+    throw new Error("Veículo não encontrado.");
+  }
+
+  if (anterior.arquivadoEm !== null) {
+    throw new Error("O veículo não pode ser marcado como disponível.");
+  }
+  const validacao = validarTransicaoStatusVeiculo(
+    anterior.status,
+    STATUS_VEICULO.DISPONIVEL
+  );
+  if (!validacao.valido) throw new Error("O veículo não pode ser marcado como disponível.");
+
+  let atualizado: Veiculo | null;
+  try {
+    atualizado = await deps.marcarDisponivel(id);
+  } catch {
+    throw new Error("Não foi possível atualizar o status do veículo.");
+  }
+  if (atualizado === null) throw new Error("Não foi possível atualizar o status do veículo.");
+  await deps.auditarConclusaoPublicacao(anterior, atualizado);
   return atualizado;
 }
 

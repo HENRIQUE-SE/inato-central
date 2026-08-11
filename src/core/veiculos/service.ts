@@ -82,13 +82,15 @@ export function validarTransicaoStatusVeiculo(
   statusNovo: StatusVeiculo
 ): ResultadoValidacaoTransicaoStatusVeiculo {
   if (
-    statusAtual === STATUS_VEICULO.EM_PREPARACAO &&
-    statusNovo === STATUS_VEICULO.PRONTO_PARA_ANUNCIAR
+    (statusAtual === STATUS_VEICULO.EM_PREPARACAO &&
+      statusNovo === STATUS_VEICULO.PRONTO_PARA_ANUNCIAR) ||
+    (statusAtual === STATUS_VEICULO.PRONTO_PARA_ANUNCIAR &&
+      statusNovo === STATUS_VEICULO.DISPONIVEL)
   ) {
     return { valido: true };
   }
   return {
     valido: false,
-    mensagem: "O veículo não pode ser marcado como pronto para anunciar.",
+    mensagem: "Transição de status do veículo não permitida.",
   };
 }

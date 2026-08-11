@@ -152,3 +152,15 @@ Depois da transição persistida, a aplicação registra evento `veiculos`/`alte
 ## Interface da conclusão
 
 Na ficha individual, usuários autorizados visualizam `Marcar como pronto para anunciar` somente quando o status é `em_preparacao`. A confirmação permite confirmar ou cancelar sem biblioteca adicional. Durante a execução, cliques repetidos são bloqueados. Após sucesso, a ficha passa a exibir `Pronto para anunciar` e a ação desaparece.
+
+## Publicação operacional
+
+`Disponível` nesta fase representa a liberação operacional do Veículo para venda dentro da INATO Central. Não representa venda, reserva, garantia, financiamento, transferência documental nem publicação automática em site público, Facebook, Instagram, Marketplace, portais ou APIs externas.
+
+A operação pública `marcarVeiculoDisponivel(id)` representa exclusivamente a transição `pronto_para_anunciar` para `disponivel`. Ela exige usuário autenticado e a permissão específica `veiculos.publicacao.concluir`, concedida inicialmente a Administrador e Consultor. Financeiro e Teste não possuem essa permissão.
+
+O repositório chama a RPC `public.marcar_veiculo_disponivel` enviando somente `p_veiculo_id`. A função é `SECURITY DEFINER`, possui `search_path` controlado, repete a autorização organizacional, bloqueia a linha com `FOR UPDATE` e executa atualização condicional somente para Veículo não arquivado em `pronto_para_anunciar`. O papel `authenticated` continua sem `UPDATE` direto de `status`, e o trigger aceita somente as duas transições explicitamente aprovadas.
+
+Após a persistência, a auditoria registra `veiculos`/`alterar` com placa, status anterior, status novo, perfil e e-mail real do usuário autenticado. Renavam, chassi e identificadores organizacionais não integram os detalhes.
+
+Na ficha individual, o botão `Marcar como disponível` aparece somente para usuário autorizado e Veículo em `pronto_para_anunciar`. A confirmação pergunta se o Veículo está disponível para venda, bloqueia cliques repetidos durante o processamento e, após sucesso, exibe `Veículo marcado como disponível.`. Nenhuma ação de transição aparece quando o Veículo já está disponível.
