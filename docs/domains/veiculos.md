@@ -20,7 +20,7 @@ Todo Veículo pertence obrigatoriamente a uma empresa e a uma unidade operaciona
 
 ## Status operacional
 
-Os status oficiais são `em_preparacao`, `disponivel`, `reservado`, `vendido` e `cancelado`. O status inicial persistido é `em_preparacao`; disponibilidade depende de fluxo futuro.
+Os status oficiais reconhecidos são `em_preparacao`, `pronto_para_anunciar`, `disponivel`, `reservado`, `vendido` e `cancelado`. O status inicial persistido é `em_preparacao`. A única transição implementada é `em_preparacao` para `pronto_para_anunciar`; os demais valores históricos continuam reconhecidos, mas não possuem novas transições nesta fase.
 
 ## Status e arquivamento
 
@@ -127,4 +127,28 @@ Falhas de carregamento, ausência do Veículo e falhas de atualização não exp
 
 ## Fora do escopo da edição atual
 
-Mudança de status, fotos, checklist, histórico, vistoria, venda, arquivamento e exclusão permanecem não implementados. A Oportunidade de origem não pode ser modificada.
+Outras mudanças de status, fotos, checklist, histórico, vistoria, anúncio público, publicação automática, negociação, reserva, venda, cancelamento operacional, arquivamento e exclusão permanecem não implementados. A Oportunidade de origem não pode ser modificada.
+
+## Conclusão da preparação
+
+A operação pública `marcarVeiculoProntoParaAnunciar(id)` representa exclusivamente a transição `em_preparacao` para `pronto_para_anunciar`. Status não é campo livre, não integra o formulário e não é recebido como parâmetro da operação. Uma função pura do Core valida a matriz, que possui somente essa transição.
+
+O serviço exige usuário autenticado e `veiculos.preparacao.concluir`, carrega o Veículo, rejeita registros ausentes, arquivados ou em status incompatível, chama o repositório específico, registra auditoria depois da persistência e devolve o Veículo atualizado. Administrador e Consultor possuem a permissão; Financeiro e Teste não possuem.
+
+## RPC da preparação
+
+O repositório chama `public.marcar_veiculo_pronto_para_anunciar` enviando somente `p_veiculo_id`. A função é `SECURITY DEFINER`, possui `search_path` controlado, não aceita status nem contexto organizacional do cliente e pode ser executada somente por `authenticated`.
+
+A RPC obtém `auth.uid()`, bloqueia a linha durante a operação, valida vínculo ativo, empresa, unidade não nula e correspondente, perfil e a permissão `veiculos.preparacao.concluir`. O Veículo deve estar não arquivado e em `em_preparacao`. O `UPDATE` condicional define `pronto_para_anunciar` e `atualizado_em = now()`, impedindo duas transições concorrentes válidas.
+
+## Proteção contra bypass de status
+
+O papel `authenticated` perde o privilégio genérico de `UPDATE` e recebe concessão por coluna apenas para os campos operacionais editáveis da Sprint 15 e `atualizado_em`; `status` não integra essa concessão. O trigger estrutural continua protegendo identificador, empresa, unidade, oportunidade, criação e arquivamento e aceita mudança de status somente no par aprovado. A combinação de privilégio por coluna, RPC específica e trigger impede atualização direta de status pelo REST autenticado.
+
+## Auditoria da conclusão
+
+Depois da transição persistida, a aplicação registra evento `veiculos`/`alterar`, resultado `sucesso` e origem `usuario`. Os detalhes contêm somente placa, `statusAnterior`, `statusNovo`, `perfilCodigo` e `usuarioEmail`. Renavam, chassi, contexto organizacional, credenciais e payload bruto não são registrados.
+
+## Interface da conclusão
+
+Na ficha individual, usuários autorizados visualizam `Marcar como pronto para anunciar` somente quando o status é `em_preparacao`. A confirmação permite confirmar ou cancelar sem biblioteca adicional. Durante a execução, cliques repetidos são bloqueados. Após sucesso, a ficha passa a exibir `Pronto para anunciar` e a ação desaparece.

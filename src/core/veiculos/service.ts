@@ -4,8 +4,10 @@ import type {
   DadosCriacaoVeiculo,
   ListagemVeiculos,
   ResultadoValidacaoVeiculo,
+  ResultadoValidacaoTransicaoStatusVeiculo,
   Veiculo,
 } from "./types";
+import { STATUS_VEICULO, type StatusVeiculo } from "./constants";
 
 const CAMPOS_ATUALIZAVEIS: readonly CampoAtualizavelVeiculo[] = [
   "proprietarioNome",
@@ -73,4 +75,20 @@ export function detectarCamposAlteradosVeiculo(
   return CAMPOS_ATUALIZAVEIS.filter(
     (campo) => veiculoAnterior[campo] !== dadosAtualizados[campo]
   );
+}
+
+export function validarTransicaoStatusVeiculo(
+  statusAtual: StatusVeiculo,
+  statusNovo: StatusVeiculo
+): ResultadoValidacaoTransicaoStatusVeiculo {
+  if (
+    statusAtual === STATUS_VEICULO.EM_PREPARACAO &&
+    statusNovo === STATUS_VEICULO.PRONTO_PARA_ANUNCIAR
+  ) {
+    return { valido: true };
+  }
+  return {
+    valido: false,
+    mensagem: "O veículo não pode ser marcado como pronto para anunciar.",
+  };
 }

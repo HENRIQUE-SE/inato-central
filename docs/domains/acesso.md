@@ -11,6 +11,12 @@ O domínio define perfis, permissões, vínculos e autorização pura. Supabase 
 - Financeiro: nenhuma permissão operacional desta fase.
 - Teste: somente `oportunidades.visualizar`.
 
+## Permissão de conclusão da preparação
+
+A permissão específica `veiculos.preparacao.concluir` autoriza exclusivamente a operação que avança um Veículo de `em_preparacao` para `pronto_para_anunciar`. Administrador e Consultor possuem a permissão. Financeiro e Teste não possuem. As permissões anteriores permanecem inalteradas.
+
+Essa autorização é validada na interface, no serviço e dentro da RPC PostgreSQL. O perfil Teste continua restrito à visualização da operação real; sua futura finalidade de treinamento e simulação dependerá de ambiente e dados isolados.
+
 ## Vínculos e negação
 
 `usuarios_perfis` associa o UUID real do Supabase Auth a empresa, unidade e perfil. Usuário sem autenticação, vínculo ativo ou permissão é negado. O erro público é `Acesso não autorizado.`.

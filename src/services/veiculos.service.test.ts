@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { test } from "node:test";
 import { STATUS_VEICULO, type DadosCriacaoVeiculo, type Veiculo } from "@/core/veiculos";
 import type { ContextoAcesso } from "@/core/acesso";
-import { atualizarVeiculoPersistido, criarVeiculoPersistido, listarVeiculosPersistidos, obterVeiculoPersistidoPorId } from "@/lib/veiculos/veiculos.repository";
+import { atualizarVeiculoPersistido, criarVeiculoPersistido, listarVeiculosPersistidos, marcarVeiculoProntoParaAnunciarPersistido, obterVeiculoPersistidoPorId } from "@/lib/veiculos/veiculos.repository";
 import {
   criarVeiculo,
   atualizarVeiculo,
   listarVeiculos,
   listarOportunidadesDisponiveisParaVeiculo,
+  marcarVeiculoProntoParaAnunciar,
   obterVeiculoPorId,
   type DadosFormularioAtualizacaoVeiculo,
   type DadosFormularioVeiculo,
@@ -232,4 +235,70 @@ test("repositório atualiza somente campos editáveis, inclui atualizado_em e ma
   const dados = { proprietarioNome: "Novo", placa: atual.placa, marca: atual.marca, modelo: atual.modelo, versao: null, anoFabricacao: 2025, anoModelo: 2026, cor: atual.cor, quilometragem: 500, renavam: null, chassi: null, codigoFipe: null };
   const resultado = await atualizarVeiculoPersistido(atual.id, dados, async (_id, registro) => { captura.valor = registro; return { data: { id: atual.id, empresa_id: atual.empresaId, unidade_id: atual.unidadeId, oportunidade_id: atual.oportunidadeId, proprietario_nome: dados.proprietarioNome, placa: dados.placa, renavam: dados.renavam, chassi: dados.chassi, marca: dados.marca, modelo: dados.modelo, versao: dados.versao, ano_fabricacao: dados.anoFabricacao, ano_modelo: dados.anoModelo, cor: dados.cor, quilometragem: dados.quilometragem, codigo_fipe: dados.codigoFipe, status: atual.status, criado_em: atual.criadoEm, atualizado_em: "novo", arquivado_em: null }, error: null }; });
   const enviado = captura.valor; assert.ok(enviado); assert.equal(typeof enviado.atualizado_em, "string"); assert.equal("empresa_id" in enviado, false); assert.equal("oportunidade_id" in enviado, false); assert.equal("status" in enviado, false); assert.equal(resultado?.atualizadoEm, "novo");
+});
+
+function dependenciasConclusao(alteracoes: Partial<DependenciasVeiculos> = {}): Partial<DependenciasVeiculos> {
+  const atual = veiculoAtual();
+  return {
+    obterUsuario: async () => ({ id: "usuario-1", email: "usuario@inato.test" }),
+    exigirConclusaoPreparacao: async () => CONTEXTO,
+    obterPorId: async () => atual,
+    marcarProntoParaAnunciar: async () => ({ ...atual, status: STATUS_VEICULO.PRONTO_PARA_ANUNCIAR, atualizadoEm: "novo" }),
+    auditarConclusaoPreparacao: async () => undefined,
+    ...alteracoes,
+  };
+}
+
+for (const perfil of ["administrador", "consultor"] as const) {
+  test(`${perfil} autorizado conclui preparação`, async () => {
+    const contexto = { ...CONTEXTO, perfil: { ...CONTEXTO.perfil, codigo: perfil } };
+    const resultado = await marcarVeiculoProntoParaAnunciar("veiculo-1", dependenciasConclusao({ exigirConclusaoPreparacao: async () => contexto }));
+    assert.equal(resultado.status, "pronto_para_anunciar");
+  });
+}
+for (const perfil of ["teste", "financeiro"] as const) {
+  test(`${perfil} não conclui preparação nem chama repository`, async () => {
+    let chamou = false;
+    await assert.rejects(marcarVeiculoProntoParaAnunciar("veiculo-1", dependenciasConclusao({
+      exigirConclusaoPreparacao: async () => { throw new Error("Acesso não autorizado."); },
+      marcarProntoParaAnunciar: async () => { chamou = true; return veiculoAtual(); },
+    })), new Error("Acesso não autorizado."));
+    assert.equal(chamou, false);
+  });
+}
+test("usuário não autenticado não conclui preparação", async () => assert.rejects(marcarVeiculoProntoParaAnunciar("veiculo-1", dependenciasConclusao({ obterUsuario: async () => null })), new Error("Acesso não autorizado.")));
+test("veículo inexistente não conclui preparação", async () => assert.rejects(marcarVeiculoProntoParaAnunciar("ausente", dependenciasConclusao({ obterPorId: async () => null })), new Error("Veículo não encontrado.")));
+test("veículo arquivado não conclui preparação", async () => assert.rejects(marcarVeiculoProntoParaAnunciar("veiculo-1", dependenciasConclusao({ obterPorId: async () => ({ ...veiculoAtual(), arquivadoEm: "2026-08-11T00:00:00.000Z" }) })), new Error("O veículo não pode ser marcado como pronto para anunciar.")));
+test("status atual inválido impede repository", async () => { let chamou = false; await assert.rejects(marcarVeiculoProntoParaAnunciar("veiculo-1", dependenciasConclusao({ obterPorId: async () => ({ ...veiculoAtual(), status: STATUS_VEICULO.DISPONIVEL }), marcarProntoParaAnunciar: async () => { chamou = true; return veiculoAtual(); } })), new Error("O veículo não pode ser marcado como pronto para anunciar.")); assert.equal(chamou, false); });
+test("repository da transição recebe somente o ID", async () => { const ids: string[] = []; await marcarVeiculoProntoParaAnunciar("veiculo-1", dependenciasConclusao({ marcarProntoParaAnunciar: async (id) => { ids.push(id); return { ...veiculoAtual(), status: STATUS_VEICULO.PRONTO_PARA_ANUNCIAR }; } })); assert.deepEqual(ids, ["veiculo-1"]); });
+test("falha técnica da transição gera mensagem controlada e não audita", async () => { let auditou = false; await assert.rejects(marcarVeiculoProntoParaAnunciar("veiculo-1", dependenciasConclusao({ marcarProntoParaAnunciar: async () => { throw new Error("PostgreSQL"); }, auditarConclusaoPreparacao: async () => { auditou = true; } })), new Error("Não foi possível atualizar o status do veículo.")); assert.equal(auditou, false); });
+test("auditoria da transição ocorre somente depois da persistência", async () => { const ordem: string[] = []; await marcarVeiculoProntoParaAnunciar("veiculo-1", dependenciasConclusao({ marcarProntoParaAnunciar: async () => { ordem.push("persistência"); return { ...veiculoAtual(), status: STATUS_VEICULO.PRONTO_PARA_ANUNCIAR }; }, auditarConclusaoPreparacao: async () => { ordem.push("auditoria"); } })); assert.deepEqual(ordem, ["persistência", "auditoria"]); });
+test("repositório chama somente a RPC específica com p_veiculo_id e mapeia retorno", async () => {
+  const parametros: Record<string, string>[] = []; const atual = veiculoAtual();
+  const resultado = await marcarVeiculoProntoParaAnunciarPersistido("veiculo-1", async (recebidos) => { parametros.push(recebidos); return { data: { id: atual.id, empresa_id: atual.empresaId, unidade_id: atual.unidadeId, oportunidade_id: atual.oportunidadeId, proprietario_nome: atual.proprietarioNome, placa: atual.placa, renavam: atual.renavam, chassi: atual.chassi, marca: atual.marca, modelo: atual.modelo, versao: atual.versao, ano_fabricacao: atual.anoFabricacao, ano_modelo: atual.anoModelo, cor: atual.cor, quilometragem: atual.quilometragem, codigo_fipe: atual.codigoFipe, status: STATUS_VEICULO.PRONTO_PARA_ANUNCIAR, criado_em: atual.criadoEm, atualizado_em: "novo", arquivado_em: null }, error: null }; });
+  assert.deepEqual(parametros, [{ p_veiculo_id: "veiculo-1" }]); assert.equal(Object.keys(parametros[0] ?? {}).length, 1); assert.equal(resultado?.status, "pronto_para_anunciar");
+});
+
+const MIGRACAO_STATUS = readFileSync(resolve(process.cwd(), "supabase/migrations/20260811_enable_veiculos_pronto_para_anunciar.sql"), "utf8");
+
+test("migração preserva estados e adiciona pronto_para_anunciar ao CHECK", () => {
+  for (const status of ["em_preparacao", "pronto_para_anunciar", "disponivel", "reservado", "vendido", "cancelado"]) assert.match(MIGRACAO_STATUS, new RegExp(`'${status}'`));
+  assert.match(MIGRACAO_STATUS, /add constraint veiculos_status_check check/);
+});
+test("RPC recebe somente o identificador e possui contexto de segurança controlado", () => {
+  assert.match(MIGRACAO_STATUS, /marcar_veiculo_pronto_para_anunciar\(\s*p_veiculo_id uuid\s*\)/);
+  assert.match(MIGRACAO_STATUS, /security definer/); assert.match(MIGRACAO_STATUS, /set search_path = ''/);
+  assert.match(MIGRACAO_STATUS, /revoke execute[\s\S]*from public, anon/); assert.match(MIGRACAO_STATUS, /grant execute[\s\S]*to authenticated/);
+});
+test("RPC valida permissão, vínculo, contexto, arquivamento e status inicial", () => {
+  for (const trecho of ["veiculos.preparacao.concluir", "up.usuario_id = v_usuario_id", "up.empresa_id = v.empresa_id", "up.unidade_id is not null", "up.unidade_id = v.unidade_id", "up.ativo", "v_veiculo.arquivado_em is not null", "v_veiculo.status <> 'em_preparacao'"]) assert.ok(MIGRACAO_STATUS.includes(trecho));
+});
+test("authenticated não recebe UPDATE direto de status e edição comum é preservada", () => {
+  assert.match(MIGRACAO_STATUS, /revoke update on table public\.veiculos from public, anon, authenticated/);
+  const concessao = MIGRACAO_STATUS.match(/grant update \(([\s\S]*?)\) on table public\.veiculos to authenticated/)?.[1] ?? "";
+  assert.equal(concessao.includes("status"), false); assert.ok(concessao.includes("proprietario_nome")); assert.ok(concessao.includes("atualizado_em"));
+});
+test("trigger preserva estruturas e permite somente a transição declarada", () => {
+  for (const campo of ["id", "empresa_id", "unidade_id", "oportunidade_id", "criado_em", "arquivado_em"]) assert.ok(MIGRACAO_STATUS.includes(`old.${campo} is distinct from new.${campo}`));
+  assert.match(MIGRACAO_STATUS, /old\.status = 'em_preparacao'[\s\S]*new\.status = 'pronto_para_anunciar'/);
 });

@@ -46,6 +46,10 @@ type ExecutarAtualizacaoVeiculo = (
   id: string,
   dados: Record<string, string | number | null>
 ) => Promise<ResultadoVeiculo>;
+type ParametrosMarcarProntoParaAnunciar = { p_veiculo_id: string };
+type ExecutarTransicaoProntoParaAnunciar = (
+  parametros: ParametrosMarcarProntoParaAnunciar
+) => Promise<ResultadoVeiculo>;
 
 function mapearVeiculo(linha: LinhaVeiculo): Veiculo {
   return {
@@ -106,6 +110,14 @@ async function atualizarVeiculo(
     .is("arquivado_em", null)
     .select("*")
     .maybeSingle();
+}
+
+async function executarTransicaoProntoParaAnunciar(
+  parametros: ParametrosMarcarProntoParaAnunciar
+): Promise<ResultadoVeiculo> {
+  return supabase
+    .rpc("marcar_veiculo_pronto_para_anunciar", parametros)
+    .single();
 }
 
 export async function listarVeiculosPersistidos(
@@ -173,6 +185,15 @@ export async function atualizarVeiculoPersistido(
     atualizado_em: new Date().toISOString(),
   };
   const { data, error } = await executarAtualizacao(id, registro);
+  if (error) throw error;
+  return data === null ? null : mapearVeiculo(data);
+}
+
+export async function marcarVeiculoProntoParaAnunciarPersistido(
+  id: string,
+  executarTransicao: ExecutarTransicaoProntoParaAnunciar = executarTransicaoProntoParaAnunciar
+): Promise<Veiculo | null> {
+  const { data, error } = await executarTransicao({ p_veiculo_id: id });
   if (error) throw error;
   return data === null ? null : mapearVeiculo(data);
 }

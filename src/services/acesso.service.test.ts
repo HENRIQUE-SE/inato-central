@@ -17,6 +17,7 @@ const contextoConsultor: ContextoAcesso = {
     CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_CRIAR,
     CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_ALTERAR,
     CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_EXCLUIR,
+    CODIGOS_PERMISSAO_ACESSO.VEICULOS_PREPARACAO_CONCLUIR,
   ].map((codigo) => ({ id: codigo, codigo, nome: codigo, descricao: null, criadoEm: "2026-08-07T00:00:00.000Z" })),
 };
 const dependenciasConsultor = { ...dependencias, obterContextoPersistido: async () => contextoConsultor };
@@ -31,12 +32,13 @@ test("exigirPermissao nega permissão ausente com mensagem controlada", async ()
 test("erro técnico é convertido", async () => await assert.rejects(obterContextoAcessoAtual({ ...dependencias, obterContextoPersistido: async () => { throw new Error("técnico"); } }), new Error("Não foi possível verificar o acesso.")));
 test("consultor não possui auditoria.visualizar", async () => assert.equal(await usuarioAtualPossuiPermissao(CODIGOS_PERMISSAO_ACESSO.AUDITORIA_VISUALIZAR, dependenciasConsultor), false));
 test("exigirPermissao nega auditoria ao consultor", async () => await assert.rejects(exigirPermissao(CODIGOS_PERMISSAO_ACESSO.AUDITORIA_VISUALIZAR, dependenciasConsultor), new Error("Acesso não autorizado.")));
-test("consultor mantém exatamente as quatro permissões de oportunidades", async () => {
+test("consultor mantém as quatro permissões de oportunidades e a conclusão de preparação", async () => {
   const atual = await obterContextoAcessoAtual(dependenciasConsultor);
   assert.deepEqual(atual?.permissoes.map(({ codigo }) => codigo), [
     CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_VISUALIZAR,
     CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_CRIAR,
     CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_ALTERAR,
     CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_EXCLUIR,
+    CODIGOS_PERMISSAO_ACESSO.VEICULOS_PREPARACAO_CONCLUIR,
   ]);
 });

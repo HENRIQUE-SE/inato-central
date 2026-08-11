@@ -54,3 +54,7 @@ export type ListagemVeiculos = Readonly<{
 export type ResultadoValidacaoVeiculo =
   | { valido: true }
   | { valido: false; campo: string; mensagem: string };
+
+export type ResultadoValidacaoTransicaoStatusVeiculo =
+  | { valido: true }
+  | { valido: false; mensagem: string };

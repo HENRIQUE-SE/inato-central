@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { STATUS_VEICULO } from "./constants";
-import { criarListagemVeiculos, detectarCamposAlteradosVeiculo, validarDadosAtualizacaoVeiculo, validarDadosCriacaoVeiculo } from "./service";
+import { criarListagemVeiculos, detectarCamposAlteradosVeiculo, validarDadosAtualizacaoVeiculo, validarDadosCriacaoVeiculo, validarTransicaoStatusVeiculo } from "./service";
 import type { DadosAtualizacaoVeiculo, DadosCriacaoVeiculo, Veiculo } from "./types";
 
 const DADOS: DadosCriacaoVeiculo = {
@@ -47,9 +47,9 @@ test("devolve cópia independente e imutável da listagem", () => {
   assert.equal(Object.isFrozen(listagem), true);
 });
 
-test("define exatamente os cinco status oficiais", () => {
+test("define exatamente os seis status oficiais", () => {
   assert.deepEqual(Object.values(STATUS_VEICULO), [
-    "em_preparacao", "disponivel", "reservado", "vendido", "cancelado",
+    "em_preparacao", "pronto_para_anunciar", "disponivel", "reservado", "vendido", "cancelado",
   ]);
 });
 
@@ -108,3 +108,15 @@ test("atualização aplica a mesma regra de anos", () => assert.equal(validarDad
 test("validação da atualização não altera a entrada", () => { const antes = structuredClone(ATUALIZACAO); validarDadosAtualizacaoVeiculo(ATUALIZACAO); assert.deepEqual(ATUALIZACAO, antes); });
 test("detecta somente campos efetivamente alterados em ordem estável", () => assert.deepEqual(detectarCamposAlteradosVeiculo(VEICULO, { ...ATUALIZACAO, proprietarioNome: "Outro", cor: "Branco", quilometragem: 456 }), ["proprietarioNome", "cor", "quilometragem"]));
 test("ignora campos que permaneceram iguais", () => assert.deepEqual(detectarCamposAlteradosVeiculo(VEICULO, ATUALIZACAO), []));
+
+test("reconhece pronto_para_anunciar", () => assert.equal(STATUS_VEICULO.PRONTO_PARA_ANUNCIAR, "pronto_para_anunciar"));
+test("permite somente em_preparacao para pronto_para_anunciar", () => assert.deepEqual(validarTransicaoStatusVeiculo(STATUS_VEICULO.EM_PREPARACAO, STATUS_VEICULO.PRONTO_PARA_ANUNCIAR), { valido: true }));
+test("rejeita origem igual ao destino", () => assert.equal(validarTransicaoStatusVeiculo(STATUS_VEICULO.EM_PREPARACAO, STATUS_VEICULO.EM_PREPARACAO).valido, false));
+test("rejeita regressão para em_preparacao", () => assert.equal(validarTransicaoStatusVeiculo(STATUS_VEICULO.PRONTO_PARA_ANUNCIAR, STATUS_VEICULO.EM_PREPARACAO).valido, false));
+test("rejeita disponível para pronto_para_anunciar", () => assert.equal(validarTransicaoStatusVeiculo(STATUS_VEICULO.DISPONIVEL, STATUS_VEICULO.PRONTO_PARA_ANUNCIAR).valido, false));
+test("rejeita destino diferente do declarado", () => assert.equal(validarTransicaoStatusVeiculo(STATUS_VEICULO.EM_PREPARACAO, STATUS_VEICULO.DISPONIVEL).valido, false));
+test("validação de transição não altera as entradas e tem resultado previsível", () => {
+  const atual = STATUS_VEICULO.EM_PREPARACAO; const novo = STATUS_VEICULO.PRONTO_PARA_ANUNCIAR;
+  const primeiro = validarTransicaoStatusVeiculo(atual, novo); const segundo = validarTransicaoStatusVeiculo(atual, novo);
+  assert.equal(atual, "em_preparacao"); assert.equal(novo, "pronto_para_anunciar"); assert.deepEqual(primeiro, segundo);
+});

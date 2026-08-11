@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { STATUS_VEICULO, type Veiculo } from "@/core/veiculos";
 import type { ContextoAcesso } from "@/core/acesso";
 import type { RegistroAuditoria } from "@/core/auditoria";
-import { registrarAuditoriaAlteracaoVeiculo, registrarAuditoriaCriacaoVeiculo } from "./veiculos.auditoria";
+import { registrarAuditoriaAlteracaoVeiculo, registrarAuditoriaConclusaoPreparacaoVeiculo, registrarAuditoriaCriacaoVeiculo } from "./veiculos.auditoria";
 
 const VEICULO: Veiculo = {
   id: "veiculo-1", empresaId: "empresa-1", unidadeId: "unidade-1",
@@ -71,4 +71,17 @@ test("registra alteração com campos alterados e sem dados automotivos sensíve
   assert.deepEqual(evento.detalhes?.camposAlterados, ["cor", "quilometragem"]);
   assert.equal("renavam" in (evento.detalhes ?? {}), false);
   assert.equal("chassi" in (evento.detalhes ?? {}), false);
+});
+
+test("registra conclusão da preparação somente com os detalhes permitidos", async () => {
+  let persistido: RegistroAuditoria | null = null;
+  await registrarAuditoriaConclusaoPreparacaoVeiculo(VEICULO, { ...VEICULO, status: STATUS_VEICULO.PRONTO_PARA_ANUNCIAR }, {
+    obterUsuario: async () => ({ id: "usuario-1", email: "usuario@inato.test" }),
+    obterContextoAcesso: async () => CONTEXTO,
+    persistir: async (evento) => { persistido = evento; return evento; },
+  });
+  assert.ok(persistido); const evento: RegistroAuditoria = persistido;
+  assert.equal(evento.modulo, "veiculos"); assert.equal(evento.acao, "alterar"); assert.equal(evento.recursoId, "veiculo-1");
+  assert.deepEqual(evento.detalhes, { placa: "ABC1D23", statusAnterior: "em_preparacao", statusNovo: "pronto_para_anunciar", perfilCodigo: "administrador", usuarioEmail: "usuario@inato.test" });
+  for (const campo of ["renavam", "chassi", "empresaId", "unidadeId"]) assert.equal(campo in (evento.detalhes ?? {}), false);
 });

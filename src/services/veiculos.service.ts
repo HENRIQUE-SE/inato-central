@@ -1,7 +1,9 @@
 import {
   detectarCamposAlteradosVeiculo,
+  STATUS_VEICULO,
   validarDadosAtualizacaoVeiculo,
   validarDadosCriacaoVeiculo,
+  validarTransicaoStatusVeiculo,
   type DadosAtualizacaoVeiculo,
   type DadosCriacaoVeiculo,
   type ListagemVeiculos,
@@ -43,14 +45,20 @@ export type DependenciasVeiculos = {
   criar: (dados: DadosCriacaoVeiculo) => Promise<Veiculo>;
   obterPorId: (id: string) => Promise<Veiculo | null>;
   atualizar: (id: string, dados: DadosAtualizacaoVeiculo) => Promise<Veiculo | null>;
+  marcarProntoParaAnunciar: (id: string) => Promise<Veiculo | null>;
   obterUsuario: () => Promise<UsuarioAutenticado | null>;
   exigirVisualizacao: () => Promise<ContextoAcesso>;
   exigirCriacao: () => Promise<ContextoAcesso>;
   exigirAlteracao: () => Promise<ContextoAcesso>;
+  exigirConclusaoPreparacao: () => Promise<ContextoAcesso>;
   auditarCriacao: (veiculo: Veiculo) => Promise<void>;
   auditarAlteracao: (
     veiculo: Veiculo,
     camposAlterados: readonly string[]
+  ) => Promise<void>;
+  auditarConclusaoPreparacao: (
+    veiculoAnterior: Veiculo,
+    veiculoAtualizado: Veiculo
   ) => Promise<void>;
   listarOportunidades: () => Promise<Oportunidade[]>;
 };
@@ -78,6 +86,11 @@ async function atualizarPersistido(
   return atualizarVeiculoPersistido(id, dados);
 }
 
+async function marcarProntoParaAnunciarPersistido(id: string): Promise<Veiculo | null> {
+  const { marcarVeiculoProntoParaAnunciarPersistido } = await import("@/lib/veiculos/veiculos.repository");
+  return marcarVeiculoProntoParaAnunciarPersistido(id);
+}
+
 async function auditarCriacao(veiculo: Veiculo): Promise<void> {
   const { registrarAuditoriaCriacaoVeiculo } = await import("./veiculos.auditoria");
   return registrarAuditoriaCriacaoVeiculo(veiculo);
@@ -91,6 +104,14 @@ async function auditarAlteracao(
   return registrarAuditoriaAlteracaoVeiculo(veiculo, camposAlterados);
 }
 
+async function auditarConclusaoPreparacao(
+  veiculoAnterior: Veiculo,
+  veiculoAtualizado: Veiculo
+): Promise<void> {
+  const { registrarAuditoriaConclusaoPreparacaoVeiculo } = await import("./veiculos.auditoria");
+  return registrarAuditoriaConclusaoPreparacaoVeiculo(veiculoAnterior, veiculoAtualizado);
+}
+
 async function listarOportunidadesPublicas(): Promise<Oportunidade[]> {
   const { listarOportunidades } = await import("./oportunidades.service");
   return (await listarOportunidades({ itensPorPagina: 1000 })).dados;
@@ -101,12 +122,15 @@ const DEPENDENCIAS_PADRAO: DependenciasVeiculos = {
   criar: criarPersistido,
   obterPorId: obterPersistidoPorId,
   atualizar: atualizarPersistido,
+  marcarProntoParaAnunciar: marcarProntoParaAnunciarPersistido,
   obterUsuario: obterUsuarioAtualAutenticado,
   exigirVisualizacao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_VISUALIZAR),
   exigirCriacao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_CRIAR),
   exigirAlteracao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_ALTERAR),
+  exigirConclusaoPreparacao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.VEICULOS_PREPARACAO_CONCLUIR),
   auditarCriacao,
   auditarAlteracao,
+  auditarConclusaoPreparacao,
   listarOportunidades: listarOportunidadesPublicas,
 };
 
@@ -220,6 +244,43 @@ export async function obterOportunidadeOrigemDoVeiculo(
   } catch {
     return null;
   }
+}
+
+export async function marcarVeiculoProntoParaAnunciar(
+  id: string,
+  complemento: Partial<DependenciasVeiculos> = {}
+): Promise<Veiculo> {
+  const deps = dependencias(complemento);
+  if (await deps.obterUsuario() === null) throw new Error("Acesso não autorizado.");
+  await deps.exigirConclusaoPreparacao();
+
+  let anterior: Veiculo;
+  try {
+    const encontrado = await deps.obterPorId(id);
+    if (encontrado === null) throw new Error("não encontrado");
+    anterior = encontrado;
+  } catch {
+    throw new Error("Veículo não encontrado.");
+  }
+
+  if (anterior.arquivadoEm !== null) {
+    throw new Error("O veículo não pode ser marcado como pronto para anunciar.");
+  }
+  const validacao = validarTransicaoStatusVeiculo(
+    anterior.status,
+    STATUS_VEICULO.PRONTO_PARA_ANUNCIAR
+  );
+  if (!validacao.valido) throw new Error(validacao.mensagem);
+
+  let atualizado: Veiculo | null;
+  try {
+    atualizado = await deps.marcarProntoParaAnunciar(id);
+  } catch {
+    throw new Error("Não foi possível atualizar o status do veículo.");
+  }
+  if (atualizado === null) throw new Error("Não foi possível atualizar o status do veículo.");
+  await deps.auditarConclusaoPreparacao(anterior, atualizado);
+  return atualizado;
 }
 
 export async function listarVeiculos(
