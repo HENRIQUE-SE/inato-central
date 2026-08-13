@@ -17,6 +17,8 @@ A permissão específica `veiculos.preparacao.concluir` autoriza exclusivamente 
 
 A permissão específica `veiculos.publicacao.concluir` autoriza exclusivamente a operação que avança um Veículo de `pronto_para_anunciar` para `disponivel`. Administrador e Consultor possuem a permissão. Financeiro e Teste não possuem. Ela é independente de `veiculos.preparacao.concluir` e das permissões de Oportunidades.
 
+Negociações possuem permissões independentes: `negociacoes.visualizar`, `negociacoes.criar`, `negociacoes.alterar` e `negociacoes.encerrar`. Administrador e Consultor possuem as quatro. Teste possui somente visualização nesta fase transitória. Financeiro não possui acesso ao domínio.
+
 Essa autorização é validada na interface, no serviço e dentro da RPC PostgreSQL. O perfil Teste continua restrito à visualização da operação real; sua futura finalidade de treinamento e simulação dependerá de ambiente e dados isolados.
 
 ## Vínculos e negação

@@ -1,0 +1,17 @@
+import assert from "node:assert/strict"; import { test } from "node:test";
+import { ORIGENS_NEGOCIACAO, STATUS_NEGOCIACAO } from "./constants"; import { detectarCamposAlteradosNegociacao, validarDadosAtualizacaoNegociacao, validarDadosCriacaoNegociacao, validarTransicaoStatusNegociacao } from "./service"; import type { DadosCriacaoNegociacao, Negociacao } from "./types";
+const D:DadosCriacaoNegociacao={empresaId:"e",unidadeId:"u",veiculoId:"v",interessadoNome:"Nome",interessadoTelefone:"123",origem:"whatsapp",observacoes:null,criadoPorUsuarioId:"x"};
+const N:Negociacao={id:"n",...D,status:"em_andamento",criadoEm:"c",atualizadoEm:"a",encerradoEm:null};
+test("define exatamente quatro status",()=>assert.deepEqual(Object.values(STATUS_NEGOCIACAO),["em_andamento","convertida","perdida","cancelada"]));
+test("define exatamente oito origens",()=>assert.deepEqual(Object.values(ORIGENS_NEGOCIACAO),["whatsapp","telefone","instagram","facebook","site","indicacao","presencial","outro"]));
+test("aceita criação válida e observações null",()=>assert.deepEqual(validarDadosCriacaoNegociacao(D),{valido:true}));
+test("rejeita veículo vazio",()=>assert.equal(validarDadosCriacaoNegociacao({...D,veiculoId:" "}).valido,false));
+test("rejeita interessado vazio",()=>assert.equal(validarDadosCriacaoNegociacao({...D,interessadoNome:" "}).valido,false));
+test("rejeita telefone vazio",()=>assert.equal(validarDadosCriacaoNegociacao({...D,interessadoTelefone:" "}).valido,false));
+test("rejeita origem inválida",()=>assert.equal(validarDadosCriacaoNegociacao({...D,origem:"email" as typeof D.origem}).valido,false));
+test("aceita atualização válida",()=>assert.deepEqual(validarDadosAtualizacaoNegociacao(D),{valido:true}));
+for(const destino of ["convertida","perdida","cancelada"] as const)test(`permite em andamento para ${destino}`,()=>assert.deepEqual(validarTransicaoStatusNegociacao("em_andamento",destino),{valido:true}));
+for(const origem of ["convertida","perdida","cancelada"] as const)test(`não reabre ${origem}`,()=>assert.equal(validarTransicaoStatusNegociacao(origem,"em_andamento").valido,false));
+test("não troca estados finais nem repete",()=>{assert.equal(validarTransicaoStatusNegociacao("convertida","perdida").valido,false);assert.equal(validarTransicaoStatusNegociacao("em_andamento","em_andamento").valido,false)});
+test("detecta campos alterados sem valores",()=>assert.deepEqual(detectarCamposAlteradosNegociacao(N,{interessadoNome:"Outro",interessadoTelefone:"123",origem:"site",observacoes:null}),["interessadoNome","origem"]));
+test("validações não alteram entradas",()=>{const antes=structuredClone(D);validarDadosCriacaoNegociacao(D);assert.deepEqual(D,antes)});

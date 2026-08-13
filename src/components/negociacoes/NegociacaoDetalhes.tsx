@@ -1,0 +1,36 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { CODIGOS_PERMISSAO_ACESSO } from "@/core/acesso";
+import { ROTULOS_ORIGEM_NEGOCIACAO, ROTULOS_STATUS_NEGOCIACAO, type Negociacao, type StatusNegociacao } from "@/core/negociacoes";
+import type { Veiculo } from "@/core/veiculos";
+import { usuarioAtualPossuiPermissao } from "@/services/acesso.service";
+import { obterSessaoAtualAutenticada } from "@/services/auth.service";
+import { atualizarNegociacao, cancelarNegociacao, marcarNegociacaoConvertida, marcarNegociacaoPerdida, obterNegociacaoPorId, type DadosFormularioAtualizacaoNegociacao } from "@/services/negociacoes.service";
+import { obterVeiculoPorId } from "@/services/veiculos.service";
+import AcessoNegado from "@/components/auth/AcessoNegado";
+import NegociacaoFormulario from "./NegociacaoFormulario";
+
+export default function NegociacaoDetalhes({ id }: { id: string }) {
+  const router = useRouter();
+  const [n, setN] = useState<Negociacao | null>(null);
+  const [v, setV] = useState<Veiculo | null>(null);
+  const [editar, setEditar] = useState(false);
+  const [podeEditar, setPodeEditar] = useState(false);
+  const [podeEncerrar, setPodeEncerrar] = useState(false);
+  const [confirmar, setConfirmar] = useState<Exclude<StatusNegociacao, "em_andamento"> | null>(null);
+  const [processando, setProcessando] = useState(false);
+  const [negado, setNegado] = useState(false);
+  const [erro, setErro] = useState("");
+  const [msg, setMsg] = useState("");
+  const carregar = useCallback(async () => { const neg = await obterNegociacaoPorId(id); setN(neg); setV(await obterVeiculoPorId(neg.veiculoId)); }, [id]);
+  useEffect(() => { obterSessaoAtualAutenticada().then(async (s) => { if (!s) { router.replace("/login"); return; } const [vis, alt, enc] = await Promise.all([usuarioAtualPossuiPermissao(CODIGOS_PERMISSAO_ACESSO.NEGOCIACOES_VISUALIZAR), usuarioAtualPossuiPermissao(CODIGOS_PERMISSAO_ACESSO.NEGOCIACOES_ALTERAR), usuarioAtualPossuiPermissao(CODIGOS_PERMISSAO_ACESSO.NEGOCIACOES_ENCERRAR)]); if (!vis) { setNegado(true); return; } setPodeEditar(alt); setPodeEncerrar(enc); await carregar(); }).catch((e) => setErro(e instanceof Error ? e.message : "Não foi possível concluir a operação.")); }, [carregar, router]);
+  async function salvar(d: DadosFormularioAtualizacaoNegociacao) { setN(await atualizarNegociacao(id, d)); setEditar(false); setMsg("Negociação atualizada com sucesso."); }
+  async function encerrar() { if (!confirmar) return; setProcessando(true); try { const fn = confirmar === "convertida" ? marcarNegociacaoConvertida : confirmar === "perdida" ? marcarNegociacaoPerdida : cancelarNegociacao; setN(await fn(id)); setMsg(confirmar === "convertida" ? "Negociação marcada como convertida." : confirmar === "perdida" ? "Negociação marcada como perdida." : "Negociação cancelada."); setConfirmar(null); } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível concluir a operação."); } finally { setProcessando(false); } }
+  if (negado) return <AcessoNegado />;
+  return <main className="min-h-screen bg-slate-100"><div className="mx-auto max-w-5xl p-6"><Link href="/negociacoes">← Voltar para Negociações</Link>{erro && <p className="mt-5 bg-red-50 p-3 text-red-700">{erro}</p>}{n && v && <><div className="mt-6 flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-3xl font-bold">{n.interessadoNome}</h1><p>{v.placa} — {[v.marca, v.modelo, v.versao].filter(Boolean).join(" ")}</p></div><div className="flex flex-wrap items-center gap-2">{n.status === "em_andamento" && podeEditar && !confirmar && <button onClick={() => setEditar(true)} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Editar Negociação</button>}{n.status === "em_andamento" && podeEncerrar && !confirmar && <><button onClick={() => setConfirmar("convertida")} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold">Negociação Convertida</button><button onClick={() => setConfirmar("perdida")} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold">Negociação Perdida</button><button onClick={() => setConfirmar("cancelada")} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold">Cancelar Negociação</button></>}</div></div>{msg && <p className="mt-5 bg-emerald-50 p-3 text-emerald-700">{msg}</p>}{confirmar && <section className="mt-5"><p className="font-medium text-slate-900">{confirmar === "convertida" ? "Confirmar negociação convertida?" : confirmar === "perdida" ? "Confirmar negociação perdida?" : "Confirmar cancelamento da negociação?"}</p><div className="mt-3 flex flex-wrap gap-3"><button disabled={processando} onClick={encerrar} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Confirmar</button><button disabled={processando} onClick={() => setConfirmar(null)} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 disabled:opacity-50">Cancelar</button></div></section>}{editar ? <NegociacaoFormulario dadosIniciais={{ interessadoNome: n.interessadoNome, interessadoTelefone: n.interessadoTelefone, origem: n.origem, observacoes: n.observacoes ?? "" }} veiculoOrigem={`${v.placa} — ${v.marca} ${v.modelo}`} onCancelar={() => setEditar(false)} onSalvar={(d) => salvar(d as DadosFormularioAtualizacaoNegociacao)} /> : <section className="mt-6 grid gap-4 rounded-2xl bg-white p-6 sm:grid-cols-2"><D r="Veículo" v={[v.marca, v.modelo, v.versao].filter(Boolean).join(" ")} /><D r="Placa" v={v.placa} /><D r="Interessado" v={n.interessadoNome} /><D r="Telefone" v={n.interessadoTelefone} /><D r="Origem" v={ROTULOS_ORIGEM_NEGOCIACAO[n.origem]} /><D r="Observações" v={n.observacoes} /><D r="Status" v={ROTULOS_STATUS_NEGOCIACAO[n.status]} /><D r="Criado em" v={new Date(n.criadoEm).toLocaleString("pt-BR")} /><D r="Atualizado em" v={new Date(n.atualizadoEm).toLocaleString("pt-BR")} />{n.encerradoEm && <D r="Encerrado em" v={new Date(n.encerradoEm).toLocaleString("pt-BR")} />}</section>}</>}</div></main>;
+}
+
+function D({ r, v }: { r: string; v: string | null }) { return <div><dt className="text-xs font-semibold uppercase text-slate-500">{r}</dt><dd>{v || "Não informado"}</dd></div>; }
