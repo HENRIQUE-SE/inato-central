@@ -66,6 +66,32 @@ test("consultor autenticado é identificado mesmo quando administrador consulta"
   assert.equal(resultado.dados[0].perfil, "consultor");
 });
 
+for (const usuario of [
+  { id: "administrador-id", email: "administrador@inato.test" },
+  { id: "consultor-id", email: "consultor@inato.test" },
+]) {
+  test(`expiração automática disparada por ${usuario.id} é apresentada como Sistema`, async () => {
+    const evento = registro({
+      usuarioId: usuario.id,
+      modulo: "reservas",
+      acao: ACOES_AUDITORIA.ALTERAR,
+      origem: ORIGENS_AUDITORIA.SISTEMA,
+      recursoTipo: "reserva",
+      detalhes: { autoria: "sistema", motivo: "expiracao_24_horas", statusAnterior: "ativa", statusNovo: "expirada" },
+    });
+    const resultado = await listarAuditoria({}, consultaCom([evento]), async () => usuario);
+    assert.equal(resultado.dados[0].usuario, "Sistema");
+    assert.equal(resultado.dados[0].acao, "Expirou");
+  });
+}
+
+test("evento manual continua atribuído ao usuário real", async () => {
+  const evento = registro({ detalhes: { perfilCodigo: "consultor", usuarioEmail: "consultor@inato.test" } });
+  const resultado = await listarAuditoria({}, consultaCom([evento]), resolverUsuario);
+  assert.equal(resultado.dados[0].usuario, "consultor@inato.test");
+  assert.equal(resultado.dados[0].acao, "Criou");
+});
+
 test("calcula total de páginas", async () => {
   assert.equal((await listarAuditoria({}, consultaCom([], 21), resolverUsuario)).totalPaginas, 3);
 });

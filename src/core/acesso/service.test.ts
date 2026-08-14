@@ -34,3 +34,9 @@ for (const permissao of [CODIGOS_PERMISSAO_ACESSO.NEGOCIACOES_VISUALIZAR, CODIGO
   test(`financeiro não possui ${permissao}`, () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.FINANCEIRO), permissao), false));
 }
 test("teste possui somente visualização de negociações", () => { const atual=contexto(CODIGOS_PERFIL_ACESSO.TESTE); assert.equal(possuiPermissao(atual,CODIGOS_PERMISSAO_ACESSO.NEGOCIACOES_VISUALIZAR),true); assert.equal(possuiPermissao(atual,CODIGOS_PERMISSAO_ACESSO.NEGOCIACOES_CRIAR),false); assert.equal(possuiPermissao(atual,CODIGOS_PERMISSAO_ACESSO.NEGOCIACOES_ALTERAR),false); assert.equal(possuiPermissao(atual,CODIGOS_PERMISSAO_ACESSO.NEGOCIACOES_ENCERRAR),false); });
+for (const permissao of [CODIGOS_PERMISSAO_ACESSO.RESERVAS_VISUALIZAR, CODIGOS_PERMISSAO_ACESSO.RESERVAS_CRIAR, CODIGOS_PERMISSAO_ACESSO.RESERVAS_CANCELAR]) {
+  test(`administrador possui ${permissao}`, () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR), permissao), true));
+  test(`consultor possui ${permissao}`, () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.CONSULTOR), permissao), true));
+  test(`financeiro não possui ${permissao}`, () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.FINANCEIRO), permissao), false));
+}
+test("teste possui somente visualização de reservas", () => { const atual=contexto(CODIGOS_PERFIL_ACESSO.TESTE); assert.equal(possuiPermissao(atual,CODIGOS_PERMISSAO_ACESSO.RESERVAS_VISUALIZAR),true); assert.equal(possuiPermissao(atual,CODIGOS_PERMISSAO_ACESSO.RESERVAS_CRIAR),false); assert.equal(possuiPermissao(atual,CODIGOS_PERMISSAO_ACESSO.RESERVAS_CANCELAR),false); });

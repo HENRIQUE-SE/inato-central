@@ -78,6 +78,9 @@ function transformarRegistro(
 ): AuditoriaItem {
   const instante = new Date(registro.criadoEm);
   const usuarioEmail = textoDetalhe(registro.detalhes, "usuarioEmail");
+  const expiracaoAutomatica = registro.origem === "sistema"
+    && textoDetalhe(registro.detalhes, "autoria") === "sistema"
+    && textoDetalhe(registro.detalhes, "motivo") === "expiracao_24_horas";
 
   return {
     id: registro.id,
@@ -88,7 +91,9 @@ function transformarRegistro(
       second: "2-digit",
       timeZone: "America/Sao_Paulo",
     }),
-    usuario: usuarioEmail !== "—"
+    usuario: expiracaoAutomatica
+      ? "Sistema"
+      : usuarioEmail !== "—"
       ? usuarioEmail
       : usuarioAtual !== null && registro.usuarioId === usuarioAtual.id
         ? usuarioAtual.email || "Usuário autenticado"
@@ -98,7 +103,7 @@ function transformarRegistro(
       registro.modulo === "oportunidades"
         ? "Oportunidades"
         : registro.modulo,
-    acao: ROTULOS_ACAO[registro.acao],
+    acao: expiracaoAutomatica ? "Expirou" : ROTULOS_ACAO[registro.acao],
     resultado: ROTULOS_RESULTADO[registro.resultado],
     recurso: registro.recursoTipo,
     placa: textoDetalhe(registro.detalhes, "placa"),

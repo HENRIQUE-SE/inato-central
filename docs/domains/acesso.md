@@ -19,6 +19,8 @@ A permissão específica `veiculos.publicacao.concluir` autoriza exclusivamente 
 
 Negociações possuem permissões independentes: `negociacoes.visualizar`, `negociacoes.criar`, `negociacoes.alterar` e `negociacoes.encerrar`. Administrador e Consultor possuem as quatro. Teste possui somente visualização nesta fase transitória. Financeiro não possui acesso ao domínio.
 
+Reservas possuem permissões independentes: `reservas.visualizar`, `reservas.criar` e `reservas.cancelar`. Administrador e Consultor possuem as três. Teste possui somente visualização da operação real. Financeiro não possui acesso ao domínio nesta fase.
+
 Essa autorização é validada na interface, no serviço e dentro da RPC PostgreSQL. O perfil Teste continua restrito à visualização da operação real; sua futura finalidade de treinamento e simulação dependerá de ambiente e dados isolados.
 
 ## Vínculos e negação

@@ -1,0 +1,10 @@
+export const STATUS_RESERVA = { ATIVA: "ativa", EXPIRADA: "expirada", CANCELADA: "cancelada" } as const;
+export type StatusReserva = (typeof STATUS_RESERVA)[keyof typeof STATUS_RESERVA];
+export const ROTULOS_STATUS_RESERVA: Record<StatusReserva, string> = { ativa: "Ativa", expirada: "Expirada", cancelada: "Cancelada" };
+export const DURACAO_RESERVA_HORAS = 24 as const;
+export const MOTIVOS_CANCELAMENTO_RESERVA = { CLIENTE_DESISTIU:"cliente_desistiu", CLIENTE_NAO_COMPARECEU:"cliente_nao_compareceu", CREDITO_NAO_APROVADO:"credito_nao_aprovado", CLIENTE_COMPROU_OUTRO:"cliente_comprou_outro", PROPRIETARIO_DESISTIU:"proprietario_desistiu", VEICULO_INDISPONIVEL:"veiculo_indisponivel", CANCELADO_PELA_INATO:"cancelado_pela_inato", OUTRO:"outro" } as const;
+export type MotivoCancelamentoReserva=(typeof MOTIVOS_CANCELAMENTO_RESERVA)[keyof typeof MOTIVOS_CANCELAMENTO_RESERVA];
+export const MOTIVO_CANCELAMENTO_RESERVA_HISTORICO = "anterior_a_regra" as const;
+export type MotivoCancelamentoReservaPersistido = MotivoCancelamentoReserva | typeof MOTIVO_CANCELAMENTO_RESERVA_HISTORICO;
+export const ROTULOS_MOTIVO_CANCELAMENTO_RESERVA:Record<MotivoCancelamentoReservaPersistido,string>={cliente_desistiu:"Cliente desistiu",cliente_nao_compareceu:"Cliente não compareceu",credito_nao_aprovado:"Crédito/financiamento não aprovado",cliente_comprou_outro:"Cliente comprou outro veículo",proprietario_desistiu:"Proprietário desistiu da venda",veiculo_indisponivel:"Veículo indisponível",cancelado_pela_inato:"Cancelado pela INATO",outro:"Outro motivo",anterior_a_regra:"Cancelamento anterior à obrigatoriedade do motivo"};
+export const LIMITE_DETALHES_MOTIVO_CANCELAMENTO=500 as const;
