@@ -1,18 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { CODIGOS_PERMISSAO_ACESSO } from "@/core/acesso";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ROTULOS_STATUS_VEICULO, STATUS_VEICULO, type Veiculo } from "@/core/veiculos";
-import { usuarioAtualPossuiPermissao } from "@/services/acesso.service";
-import { obterSessaoAtualAutenticada } from "@/services/auth.service";
-import { atualizarVeiculo, marcarVeiculoDisponivel, marcarVeiculoProntoParaAnunciar, obterOportunidadeOrigemDoVeiculo, obterVeiculoPorId, type DadosFormularioAtualizacaoVeiculo } from "@/services/veiculos.service";
+import { atualizarVeiculo, criarCarregadorFichaVeiculo, marcarVeiculoDisponivel, marcarVeiculoProntoParaAnunciar, type DadosFormularioAtualizacaoVeiculo } from "@/services/veiculos.service";
 import AcessoNegado from "@/components/auth/AcessoNegado";
 import VeiculoFormulario from "./VeiculoFormulario";
 
 export default function VeiculoDetalhes({ id }: { id: string }) {
-  const router = useRouter();
   const [veiculo, setVeiculo] = useState<Veiculo | null>(null);
   const [oportunidade, setOportunidade] = useState("Oportunidade não identificada");
   const [carregando, setCarregando] = useState(true);
@@ -26,35 +21,31 @@ export default function VeiculoDetalhes({ id }: { id: string }) {
   const [confirmandoStatus, setConfirmandoStatus] = useState(false);
   const [processandoStatus, setProcessandoStatus] = useState(false);
   const [mensagem, setMensagem] = useState("");
+  const carregadorFicha = useRef<ReturnType<typeof criarCarregadorFichaVeiculo> | null>(null);
+  if (carregadorFicha.current === null) carregadorFicha.current = criarCarregadorFichaVeiculo();
 
-  const carregar = useCallback(async () => {
-    const encontrado = await obterVeiculoPorId(id);
-    const origem = await obterOportunidadeOrigemDoVeiculo(encontrado.oportunidadeId);
-    setVeiculo(encontrado);
-    if (origem) setOportunidade(`${origem.proprietario_nome} — ${origem.veiculo_informado} — ${origem.placa}`);
-  }, [id]);
+  const carregar = useCallback(() => carregadorFicha.current!(id), [id]);
 
   useEffect(() => {
     let ativo = true;
-    obterSessaoAtualAutenticada().then(async (sessao) => {
-      if (sessao === null) { router.replace("/login"); return; }
-      const [visualiza, edita, concluiPreparacao, concluiPublicacao] = await Promise.all([
-        usuarioAtualPossuiPermissao(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_VISUALIZAR),
-        usuarioAtualPossuiPermissao(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_ALTERAR),
-        usuarioAtualPossuiPermissao(CODIGOS_PERMISSAO_ACESSO.VEICULOS_PREPARACAO_CONCLUIR),
-        usuarioAtualPossuiPermissao(CODIGOS_PERMISSAO_ACESSO.VEICULOS_PUBLICACAO_CONCLUIR),
-      ]);
-      if (!visualiza) { if (ativo) setAcessoNegado(true); return; }
-      if (ativo) setPodeEditar(edita);
-      if (ativo) setPodeConcluirPreparacao(concluiPreparacao);
-      if (ativo) setPodeConcluirPublicacao(concluiPublicacao);
-      await carregar();
+    carregar().then((ficha) => {
+      if (!ativo) return;
+      setVeiculo(ficha.veiculo);
+      if (ficha.oportunidade) setOportunidade(`${ficha.oportunidade.proprietario_nome} — ${ficha.oportunidade.veiculo_informado} — ${ficha.oportunidade.placa}`);
+      setPodeEditar(ficha.permissoes.editar);
+      setPodeConcluirPreparacao(ficha.permissoes.concluirPreparacao);
+      setPodeConcluirPublicacao(ficha.permissoes.concluirPublicacao);
     }).catch((error) => {
-      if (ativo) setErro(error instanceof Error && error.message === "Veículo não encontrado."
+      if (!ativo) return;
+      if (error instanceof Error && error.message === "Acesso não autorizado.") {
+        setAcessoNegado(true);
+        return;
+      }
+      setErro(error instanceof Error && error.message === "Veículo não encontrado."
         ? error.message : "Não foi possível carregar o veículo.");
     }).finally(() => { if (ativo) setCarregando(false); });
     return () => { ativo = false; };
-  }, [carregar, router]);
+  }, [carregar]);
 
   async function salvar(dados: DadosFormularioAtualizacaoVeiculo) {
     const atualizado = await atualizarVeiculo(id, dados);

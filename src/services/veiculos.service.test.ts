@@ -3,15 +3,19 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import { STATUS_VEICULO, type DadosCriacaoVeiculo, type Veiculo } from "@/core/veiculos";
-import type { ContextoAcesso } from "@/core/acesso";
-import { atualizarVeiculoPersistido, criarVeiculoPersistido, listarVeiculosPersistidos, marcarVeiculoDisponivelPersistido, marcarVeiculoProntoParaAnunciarPersistido, obterVeiculoPersistidoPorId } from "@/lib/veiculos/veiculos.repository";
+import { CODIGOS_PERMISSAO_ACESSO, possuiPermissao, type CodigoPerfilAcesso, type ContextoAcesso } from "@/core/acesso";
+import { atualizarVeiculoPersistido, criarVeiculoPersistido, listarOportunidadesDisponiveisParaVeiculoPersistidas, listarResumoVeiculosPersistidos, listarVeiculosPersistidos, marcarVeiculoDisponivelPersistido, marcarVeiculoProntoParaAnunciarPersistido, obterFichaVeiculoPersistidaPorId, obterVeiculoPersistidoPorId } from "@/lib/veiculos/veiculos.repository";
 import {
+  abrirListagemVeiculos,
   criarVeiculo,
   atualizarVeiculo,
   listarVeiculos,
   listarOportunidadesDisponiveisParaVeiculo,
   marcarVeiculoProntoParaAnunciar,
   marcarVeiculoDisponivel,
+  criarCarregadorFichaVeiculo,
+  criarCarregadorListagemVeiculos,
+  obterFichaVeiculoPorId,
   obterVeiculoPorId,
   type DadosFormularioAtualizacaoVeiculo,
   type DadosFormularioVeiculo,
@@ -160,15 +164,9 @@ test("auditoria ocorre depois da persistência bem-sucedida", async () => {
 test("seleção omite oportunidades já vinculadas", async () => {
   const resultado = await listarOportunidadesDisponiveisParaVeiculo({
     exigirVisualizacao: async () => CONTEXTO,
-    listarOportunidades: async () => [
-      { id: "o-1", proprietario_nome: "Um", veiculo_informado: "Carro 1", placa: "AAA", telefone: "", cidade: "", origem: "", status: "", created_at: "" },
-      { id: "o-2", proprietario_nome: "Dois", veiculo_informado: "Carro 2", placa: "BBB", telefone: "", cidade: "", origem: "", status: "", created_at: "" },
+    listarOportunidadesDisponiveis: async () => [
+      { id: "o-2", proprietario_nome: "Dois", veiculo_informado: "Carro 2", placa: "BBB" },
     ],
-    listar: async () => ({ dados: [veiculo({
-      empresaId: "e", unidadeId: "u", oportunidadeId: "o-1", proprietarioNome: "Um",
-      placa: "AAA", renavam: null, chassi: null, marca: "M", modelo: "M", versao: null,
-      anoFabricacao: 2025, anoModelo: 2025, cor: "C", quilometragem: 1, codigoFipe: null,
-    })], total: 1 }),
   });
   assert.deepEqual(resultado.map(({ id }) => id), ["o-2"]);
 });
@@ -208,12 +206,101 @@ function veiculoAtual(): Veiculo {
 
 function dependenciasAtualizacao(alteracoes: Partial<DependenciasVeiculos> = {}): Partial<DependenciasVeiculos> {
   const atual = veiculoAtual();
-  return { obterUsuario: async () => ({ id: "usuario-1", email: "usuario@inato.test" }), exigirVisualizacao: async () => CONTEXTO, exigirAlteracao: async () => CONTEXTO, obterPorId: async () => atual, atualizar: async (_id, dados) => ({ ...atual, ...dados, atualizadoEm: "novo" }), auditarAlteracao: async () => undefined, ...alteracoes };
+  return { obterUsuario: async () => ({ id: "usuario-1", email: "usuario@inato.test" }), exigirVisualizacao: async () => CONTEXTO, exigirAlteracao: async () => CONTEXTO, obterPorId: async () => atual, obterFichaPorId: async () => ({ veiculo: atual, oportunidade: null }), atualizar: async (_id, dados) => ({ ...atual, ...dados, atualizadoEm: "novo" }), auditarAlteracao: async () => undefined, ...alteracoes };
 }
 
 test("obtém veículo com autenticação e permissão", async () => assert.equal((await obterVeiculoPorId("veiculo-1", dependenciasAtualizacao())).id, "veiculo-1"));
 test("obtenção sem permissão é negada", async () => assert.rejects(obterVeiculoPorId("veiculo-1", dependenciasAtualizacao({ exigirVisualizacao: async () => { throw new Error("Acesso não autorizado."); } })), new Error("Acesso não autorizado.")));
 test("veículo inexistente usa mensagem controlada", async () => assert.rejects(obterVeiculoPorId("ausente", dependenciasAtualizacao({ obterPorId: async () => null })), new Error("Veículo não encontrado.")));
+
+test("carregador compartilha a Promise de solicitações simultâneas da mesma ficha", async () => {
+  let cargasRemotas = 0;
+  let concluir!: () => void;
+  const bloqueio = new Promise<void>((resolve) => { concluir = resolve; });
+  const carregar = criarCarregadorFichaVeiculo(async () => {
+    cargasRemotas += 1;
+    await bloqueio;
+    return { veiculo: veiculoAtual(), oportunidade: null, permissoes: { editar: false, concluirPreparacao: false, concluirPublicacao: false } };
+  });
+  const primeira = carregar("veiculo-1");
+  const segunda = carregar("veiculo-1");
+  assert.equal(primeira, segunda);
+  concluir();
+  await Promise.all([primeira, segunda]);
+  assert.equal(cargasRemotas, 1);
+});
+
+test("ficha reutiliza um único contexto confiável para veículo, origem e permissões", async () => {
+  let contextos = 0;
+  let consultasConsolidadas = 0;
+  const resultado = await obterFichaVeiculoPorId("veiculo-1", dependenciasAtualizacao({
+    exigirVisualizacao: async () => { contextos += 1; return CONTEXTO; },
+    obterFichaPorId: async () => {
+      consultasConsolidadas += 1;
+      return { veiculo: veiculoAtual(), oportunidade: { id: "oportunidade-1", proprietario_nome: "Proprietário", veiculo_informado: "Veículo", placa: "ABC1D23" } };
+    },
+  }));
+  assert.equal(contextos, 1);
+  assert.equal(consultasConsolidadas, 1);
+  assert.equal(resultado.oportunidade?.id, "oportunidade-1");
+  assert.equal(CONTEXTO.vinculo.empresaId, "empresa-contexto");
+  assert.equal(CONTEXTO.vinculo.unidadeId, "unidade-contexto");
+});
+
+test("chamada pública isolada revalida acesso antes de consultar", async () => {
+  let contextos = 0;
+  const deps = dependenciasAtualizacao({
+    exigirVisualizacao: async () => { contextos += 1; return CONTEXTO; },
+  });
+  await obterVeiculoPorId("veiculo-1", deps);
+  assert.equal(contextos, 1);
+});
+
+test("negação de acesso da ficha falha sem consultar veículo ou origem", async () => {
+  let consultas = 0;
+  await assert.rejects(obterFichaVeiculoPorId("veiculo-1", dependenciasAtualizacao({
+    exigirVisualizacao: async () => { throw new Error("Acesso não autorizado."); },
+    obterFichaPorId: async () => { consultas += 1; return { veiculo: veiculoAtual(), oportunidade: null }; },
+  })), new Error("Acesso não autorizado."));
+  assert.equal(consultas, 0);
+});
+
+test("ausência da oportunidade de origem não impede a ficha", async () => {
+  const resultado = await obterFichaVeiculoPorId("veiculo-1", dependenciasAtualizacao({
+    obterFichaPorId: async () => ({ veiculo: veiculoAtual(), oportunidade: null }),
+  }));
+  assert.equal(resultado.veiculo.id, "veiculo-1");
+  assert.equal(resultado.oportunidade, null);
+});
+for (const perfil of ["administrador", "consultor", "teste"] as const) {
+  test(`${perfil} visualiza ficha consolidada conforme a matriz atual`, async () => {
+    let consultas = 0;
+    const contexto: ContextoAcesso = {
+      ...CONTEXTO,
+      perfil: { ...CONTEXTO.perfil, codigo: perfil },
+      permissoes: [{ id: "permissao", codigo: CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_VISUALIZAR, nome: "Visualizar oportunidades", descricao: null, criadoEm: "2026-08-08T00:00:00.000Z" }],
+    };
+    const resultado = await obterFichaVeiculoPorId("veiculo-1", dependenciasAtualizacao({
+      exigirVisualizacao: async () => contexto,
+      obterFichaPorId: async () => { consultas += 1; return { veiculo: veiculoAtual(), oportunidade: null }; },
+    }));
+    assert.equal(resultado.veiculo.id, "veiculo-1");
+    assert.equal(consultas, 1);
+  });
+}
+test("financeiro é recusado antes da consulta consolidada", async () => {
+  let consultas = 0;
+  await assert.rejects(obterFichaVeiculoPorId("veiculo-1", dependenciasAtualizacao({
+    exigirVisualizacao: async () => { throw new Error("Acesso não autorizado."); },
+    obterFichaPorId: async () => { consultas += 1; return { veiculo: veiculoAtual(), oportunidade: null }; },
+  })), new Error("Acesso não autorizado."));
+  assert.equal(consultas, 0);
+});
+test("veículo indisponível pela RLS preserva mensagem de não encontrado", async () => {
+  await assert.rejects(obterFichaVeiculoPorId("veiculo-1", dependenciasAtualizacao({
+    obterFichaPorId: async () => null,
+  })), new Error("Veículo não encontrado."));
+});
 test("atualização normaliza e envia somente campos editáveis", async () => {
   const recebidos: Record<string, unknown>[] = [];
   await atualizarVeiculo("veiculo-1", FORMULARIO_ATUALIZACAO, dependenciasAtualizacao({ atualizar: async (_id, dados) => { recebidos.push(dados); return { ...veiculoAtual(), ...dados }; } }));
@@ -230,6 +317,57 @@ test("repositório obtém por id e mapeia todos os campos", async () => {
   const atual = veiculoAtual();
   const resultado = await obterVeiculoPersistidoPorId("v", async () => ({ data: { id: atual.id, empresa_id: atual.empresaId, unidade_id: atual.unidadeId, oportunidade_id: atual.oportunidadeId, proprietario_nome: atual.proprietarioNome, placa: atual.placa, renavam: atual.renavam, chassi: atual.chassi, marca: atual.marca, modelo: atual.modelo, versao: atual.versao, ano_fabricacao: atual.anoFabricacao, ano_modelo: atual.anoModelo, cor: atual.cor, quilometragem: atual.quilometragem, codigo_fipe: atual.codigoFipe, status: atual.status, criado_em: atual.criadoEm, atualizado_em: atual.atualizadoEm, arquivado_em: atual.arquivadoEm }, error: null }));
   assert.deepEqual(resultado, atual);
+});
+test("repositório obtém ficha consolidada e preserva somente a oportunidade mínima", async () => {
+  const atual = veiculoAtual();
+  const resultado = await obterFichaVeiculoPersistidaPorId("veiculo-1", async (id) => {
+    assert.equal(id, "veiculo-1");
+    return {
+      data: {
+        id: atual.id, empresa_id: atual.empresaId, unidade_id: atual.unidadeId,
+        oportunidade_id: atual.oportunidadeId, proprietario_nome: atual.proprietarioNome,
+        placa: atual.placa, renavam: atual.renavam, chassi: atual.chassi,
+        marca: atual.marca, modelo: atual.modelo, versao: atual.versao,
+        ano_fabricacao: atual.anoFabricacao, ano_modelo: atual.anoModelo,
+        cor: atual.cor, quilometragem: atual.quilometragem, codigo_fipe: atual.codigoFipe,
+        status: atual.status, criado_em: atual.criadoEm, atualizado_em: atual.atualizadoEm,
+        arquivado_em: atual.arquivadoEm,
+        oportunidade: { id: "oportunidade-1", proprietario_nome: "Proprietário", veiculo_informado: "Veículo", placa: "ABC1D23" },
+      },
+      error: null,
+    };
+  });
+  assert.deepEqual(resultado?.veiculo, atual);
+  assert.deepEqual(Object.keys(resultado?.oportunidade ?? {}), ["id", "proprietario_nome", "veiculo_informado", "placa"]);
+});
+test("repositório preserva relação null na ficha consolidada", async () => {
+  const atual = veiculoAtual();
+  const resultado = await obterFichaVeiculoPersistidaPorId("veiculo-1", async () => ({
+    data: { id: atual.id, empresa_id: atual.empresaId, unidade_id: atual.unidadeId, oportunidade_id: atual.oportunidadeId, proprietario_nome: atual.proprietarioNome, placa: atual.placa, renavam: atual.renavam, chassi: atual.chassi, marca: atual.marca, modelo: atual.modelo, versao: atual.versao, ano_fabricacao: atual.anoFabricacao, ano_modelo: atual.anoModelo, cor: atual.cor, quilometragem: atual.quilometragem, codigo_fipe: atual.codigoFipe, status: atual.status, criado_em: atual.criadoEm, atualizado_em: atual.atualizadoEm, arquivado_em: atual.arquivadoEm, oportunidade: null },
+    error: null,
+  }));
+  assert.equal(resultado?.oportunidade, null);
+  assert.equal(resultado?.veiculo.oportunidadeId, "oportunidade-1");
+});
+test("consulta consolidada usa FK explícita, campos mínimos e nenhum select estrela", () => {
+  const fonte = readFileSync(resolve("src/lib/veiculos/veiculos.repository.ts"), "utf8");
+  const inicio = fonte.indexOf("async function consultarFichaVeiculoPorId");
+  const fim = fonte.indexOf("async function atualizarVeiculo", inicio);
+  const consulta = fonte.slice(inicio, fim);
+  assert.match(consulta, /oportunidade:oportunidades!veiculos_oportunidade_fk/);
+  assert.match(consulta, /\.eq\("id", id\)/);
+  assert.match(consulta, /\.is\("arquivado_em", null\)/);
+  assert.match(consulta, /\.maybeSingle\(\)/);
+  assert.doesNotMatch(consulta, /select\(\s*["'`]\*["'`]\s*\)/);
+  for (const campo of ["id", "proprietario_nome", "veiculo_informado", "placa"]) assert.match(consulta, new RegExp(`\\b${campo}\\b`));
+});
+test("ficha não contém consulta independente posterior da oportunidade", () => {
+  const fonte = readFileSync(resolve("src/services/veiculos.service.ts"), "utf8");
+  const inicio = fonte.indexOf("export async function obterFichaVeiculoPorId");
+  const fim = fonte.indexOf("export function criarCarregadorFichaVeiculo", inicio);
+  const casoDeUso = fonte.slice(inicio, fim);
+  assert.match(casoDeUso, /deps\.obterFichaPorId\(id\)/);
+  assert.doesNotMatch(casoDeUso, /Promise\.all|\.map\(/);
 });
 test("repositório atualiza somente campos editáveis, inclui atualizado_em e mapeia retorno", async () => {
   const atual = veiculoAtual(); const captura: { valor: Record<string, string | number | null> | null } = { valor: null };
@@ -375,4 +513,214 @@ test("trigger atualizado permite exatamente as duas transições", () => {
   assert.match(MIGRACAO_DISPONIVEL, /old\.status = 'pronto_para_anunciar' and new\.status = 'disponivel'/);
   for (const campo of ["id", "empresa_id", "unidade_id", "oportunidade_id", "criado_em", "arquivado_em"]) assert.ok(MIGRACAO_DISPONIVEL.includes(`old.${campo} is distinct from new.${campo}`));
   assert.match(MIGRACAO_DISPONIVEL, /revoke update \(status\)[\s\S]*from public, anon, authenticated/);
+});
+
+function contextoListagem(perfil: CodigoPerfilAcesso): ContextoAcesso {
+  const codigos = perfil === "administrador" || perfil === "consultor"
+    ? [CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_VISUALIZAR, CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_CRIAR]
+    : perfil === "teste" ? [CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_VISUALIZAR] : [];
+  return {
+    ...CONTEXTO,
+    perfil: { ...CONTEXTO.perfil, codigo: perfil, nome: perfil },
+    permissoes: codigos.map((codigo) => ({ id: codigo, codigo, nome: codigo, descricao: null, criadoEm: "2026-08-08T00:00:00.000Z" })),
+  };
+}
+
+function autoridadeListagem(perfil: CodigoPerfilAcesso) {
+  return { usuario: { id: "usuario-1", email: "usuario@inato.test" }, contexto: contextoListagem(perfil) };
+}
+
+const RESUMO_VEICULO = {
+  id: "veiculo-1", placa: "ABC1D23", marca: "Marca", modelo: "Modelo", versao: null,
+  anoFabricacao: 2025, anoModelo: 2026, quilometragem: 123,
+  proprietarioNome: "Proprietário", status: STATUS_VEICULO.EM_PREPARACAO,
+} as const;
+
+test("abertura da listagem resolve autoridade uma vez e consulta somente o resumo", async () => {
+  let autoridades = 0, consultas = 0, oportunidades = 0;
+  const resultado = await abrirListagemVeiculos({
+    obterAutoridade: async () => { autoridades += 1; return autoridadeListagem("administrador"); },
+    listarResumo: async () => { consultas += 1; return { dados: [RESUMO_VEICULO], total: 1 }; },
+    listarOportunidadesDisponiveis: async () => { oportunidades += 1; return []; },
+  });
+  assert.equal(autoridades, 1); assert.equal(consultas, 1); assert.equal(oportunidades, 0);
+  assert.equal(resultado.estado, "carregado");
+  if (resultado.estado === "carregado") { assert.deepEqual(resultado.veiculos, [RESUMO_VEICULO]); assert.equal(resultado.permissoes.criar, true); }
+  assert.equal(autoridadeListagem("administrador").contexto.vinculo.empresaId, "empresa-contexto");
+  assert.equal(autoridadeListagem("administrador").contexto.vinculo.unidadeId, "unidade-contexto");
+});
+
+for (const [perfil, estado, criar] of [
+  ["administrador", "carregado", true], ["consultor", "carregado", true],
+  ["teste", "carregado", false], ["financeiro", "acesso_negado", false],
+] as const) {
+  test(`abertura preserva permissões do perfil ${perfil}`, async () => {
+    let consultas = 0;
+    const resultado = await abrirListagemVeiculos({
+      obterAutoridade: async () => autoridadeListagem(perfil),
+      listarResumo: async () => { consultas += 1; return { dados: [], total: 0 }; },
+    });
+    assert.equal(resultado.estado, estado); assert.equal(consultas, estado === "carregado" ? 1 : 0);
+    if (resultado.estado === "carregado") assert.equal(resultado.permissoes.criar, criar);
+  });
+}
+
+test("abertura sem autenticação não consulta Veículos", async () => {
+  let consultou = false;
+  const resultado = await abrirListagemVeiculos({
+    obterAutoridade: async () => null,
+    listarResumo: async () => { consultou = true; return { dados: [], total: 0 }; },
+  });
+  assert.deepEqual(resultado, { estado: "nao_autenticado" }); assert.equal(consultou, false);
+});
+
+for (const origem of ["Auth", "contexto"] as const) {
+  test(`falha de ${origem} interrompe a abertura antes da consulta`, async () => {
+    let consultou = false;
+    await assert.rejects(abrirListagemVeiculos({
+      obterAutoridade: async () => { throw new Error(`falha de ${origem}`); },
+      listarResumo: async () => { consultou = true; return { dados: [], total: 0 }; },
+    }), new Error(`falha de ${origem}`));
+    assert.equal(consultou, false);
+  });
+}
+
+test("abertura preserva lista vazia", async () => {
+  const resultado = await abrirListagemVeiculos({ obterAutoridade: async () => autoridadeListagem("administrador"), listarResumo: async () => ({ dados: [], total: 0 }) });
+  assert.equal(resultado.estado, "carregado"); if (resultado.estado === "carregado") assert.deepEqual(resultado.veiculos, []);
+});
+
+test("falha ou negação RLS da consulta resumida usa mensagem controlada", async () => {
+  await assert.rejects(abrirListagemVeiculos({ obterAutoridade: async () => autoridadeListagem("administrador"), listarResumo: async () => { throw new Error("RLS"); } }), new Error("Não foi possível carregar os veículos."));
+});
+
+test("repository resumido devolve somente os campos da tabela", async () => {
+  const resultado = await listarResumoVeiculosPersistidos(async () => ({
+    data: [{ id: "v", placa: "ABC", marca: "M", modelo: "X", versao: null, ano_fabricacao: 2025, ano_modelo: 2026, quilometragem: 10, proprietario_nome: "P", status: STATUS_VEICULO.EM_PREPARACAO }], error: null,
+  }));
+  assert.deepEqual(Object.keys(resultado.dados[0] ?? {}), ["id", "placa", "marca", "modelo", "versao", "anoFabricacao", "anoModelo", "quilometragem", "proprietarioNome", "status"]);
+});
+
+test("consulta resumida não utiliza select estrela e preserva filtro e ordenação", () => {
+  const fonte = readFileSync(resolve("src/lib/veiculos/veiculos.repository.ts"), "utf8");
+  const consulta = fonte.slice(fonte.indexOf("async function consultarResumoVeiculos"), fonte.indexOf("function mapearVeiculoListagem"));
+  assert.doesNotMatch(consulta, /select\(\s*["']\*["']\s*\)/);
+  assert.match(consulta, /id, placa, marca, modelo, versao, ano_fabricacao, ano_modelo, quilometragem, proprietario_nome, status/);
+  assert.match(consulta, /\.is\("arquivado_em", null\)/); assert.match(consulta, /\.order\("criado_em", \{ ascending: false \}\)/);
+});
+
+test("carregador da listagem compartilha somente a Promise em andamento", async () => {
+  let chamadas = 0; let liberar!: () => void;
+  const espera = new Promise<void>((resolve) => { liberar = resolve; });
+  const carregar = criarCarregadorListagemVeiculos(async () => { chamadas += 1; await espera; return { estado: "carregado", veiculos: [], permissoes: { criar: false } }; });
+  const primeira = carregar(), segunda = carregar(); assert.equal(primeira, segunda); assert.equal(chamadas, 1);
+  liberar(); await Promise.all([primeira, segunda]);
+});
+
+test("carregador remove a Promise após sucesso", async () => {
+  let chamadas = 0;
+  const carregar = criarCarregadorListagemVeiculos(async () => { chamadas += 1; return { estado: "carregado", veiculos: [], permissoes: { criar: false } }; });
+  await carregar(); await carregar(); assert.equal(chamadas, 2);
+});
+
+test("carregador remove a Promise após falha e permite nova tentativa", async () => {
+  let chamadas = 0;
+  const carregar = criarCarregadorListagemVeiculos(async () => { chamadas += 1; if (chamadas === 1) throw new Error("falha"); return { estado: "carregado", veiculos: [], permissoes: { criar: false } }; });
+  await assert.rejects(carregar(), new Error("falha")); await carregar(); assert.equal(chamadas, 2);
+});
+
+test("repository retorna somente o contrato minimo de oportunidades disponiveis", async () => {
+  const resultado = await listarOportunidadesDisponiveisParaVeiculoPersistidas(async () => ({
+    data: [{ id: "oportunidade-1", proprietario_nome: "Proprietario", veiculo_informado: "Polo", placa: "ABC1D23", veiculos_vinculados: [] }],
+    error: null,
+  }));
+  assert.deepEqual(resultado, [{ id: "oportunidade-1", proprietario_nome: "Proprietario", veiculo_informado: "Polo", placa: "ABC1D23" }]);
+  assert.equal(Object.isFrozen(resultado), true);
+  assert.equal(Object.isFrozen(resultado[0]), true);
+});
+
+test("consulta especifica usa anti-relacao de veiculos nao arquivados", () => {
+  const fonte = readFileSync(resolve("src/lib/veiculos/veiculos.repository.ts"), "utf8");
+  const inicio = fonte.indexOf("async function consultarOportunidadesDisponiveis");
+  const fim = fonte.indexOf("function mapearVeiculoListagem", inicio);
+  const consulta = fonte.slice(inicio, fim);
+  assert.match(consulta, /id,\s*proprietario_nome,\s*veiculo_informado,\s*placa,/);
+  assert.match(consulta, /veiculos_vinculados:veiculos!veiculos_oportunidade_fk\(id\)/);
+  assert.match(consulta, /\.is\("veiculos_vinculados\.arquivado_em", null\)/);
+  assert.match(consulta, /\.is\("veiculos_vinculados", null\)/);
+  assert.doesNotMatch(consulta, /select\(["'`]\*["'`]\)/);
+});
+
+test("caso de uso autoriza uma vez e nao carrega colecoes amplas", async () => {
+  let autorizacoes = 0, consultasEspecificas = 0, consultasAmplasVeiculos = 0;
+  const resultado = await listarOportunidadesDisponiveisParaVeiculo({
+    exigirVisualizacao: async () => { autorizacoes += 1; return CONTEXTO; },
+    listarOportunidadesDisponiveis: async () => { consultasEspecificas += 1; return [{ id: "o", proprietario_nome: "P", veiculo_informado: "V", placa: "ABC" }]; },
+    listar: async () => { consultasAmplasVeiculos += 1; return { dados: [], total: 0 }; },
+  });
+  assert.equal(resultado.length, 1);
+  assert.equal(autorizacoes, 1);
+  assert.equal(consultasEspecificas, 1);
+  assert.equal(consultasAmplasVeiculos, 0);
+});
+
+test("negacao de oportunidades.visualizar impede a consulta especifica", async () => {
+  let consultas = 0;
+  await assert.rejects(listarOportunidadesDisponiveisParaVeiculo({
+    exigirVisualizacao: async () => { throw new Error("Acesso nao autorizado."); },
+    listarOportunidadesDisponiveis: async () => { consultas += 1; return []; },
+  }), /Acesso nao autorizado/);
+  assert.equal(consultas, 0);
+});
+
+test("fluxo nao depende de limite 1000 nem da listagem publica de oportunidades", () => {
+  const fonte = readFileSync(resolve("src/services/veiculos.service.ts"), "utf8");
+  const inicio = fonte.indexOf("export async function listarOportunidadesDisponiveisParaVeiculo");
+  const fim = fonte.indexOf("export async function criarVeiculo", inicio);
+  const casoDeUso = fonte.slice(inicio, fim);
+  assert.doesNotMatch(casoDeUso, /1000|listarOportunidades\(|deps\.listar\(\)|Promise\.all/);
+  assert.match(casoDeUso, /await deps\.exigirVisualizacao\(\)/);
+  assert.match(casoDeUso, /deps\.listarOportunidadesDisponiveis\(\)/);
+});
+
+test("isolamento organizacional permanece delegado as duas RLS", () => {
+  const veiculos = readFileSync(resolve("supabase/migrations/20260807_create_veiculos.sql"), "utf8");
+  const oportunidades = readFileSync(resolve("supabase/migrations/20260831_regularize_oportunidades_organizacao_rls.sql"), "utf8");
+  assert.match(veiculos, /up\.empresa_id = veiculos\.empresa_id/);
+  assert.match(veiculos, /up\.unidade_id is null or up\.unidade_id = veiculos\.unidade_id/);
+  assert.match(oportunidades, /up\.empresa_id = oportunidades\.empresa_id/);
+  assert.match(oportunidades, /p\.codigo = 'oportunidades\.visualizar'/);
+});
+
+test("Administrador Consultor e TESTE acessam a selecao e Financeiro permanece negado", async () => {
+  for (const perfil of ["administrador", "consultor", "teste", "financeiro"] as const) {
+    const contexto: ContextoAcesso = {
+      ...CONTEXTO,
+      perfil: { ...CONTEXTO.perfil, codigo: perfil },
+      permissoes: perfil === "financeiro" ? [] : [{
+        id: "permissao-visualizar",
+        codigo: CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_VISUALIZAR,
+        nome: "Visualizar oportunidades",
+        descricao: null,
+        criadoEm: "2026-08-08T00:00:00.000Z",
+      }],
+    };
+    let consultas = 0;
+    const executar = () => listarOportunidadesDisponiveisParaVeiculo({
+      exigirVisualizacao: async () => {
+        if (!possuiPermissao(contexto, CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_VISUALIZAR)) {
+          throw new Error("Acesso nao autorizado.");
+        }
+        return contexto;
+      },
+      listarOportunidadesDisponiveis: async () => { consultas += 1; return []; },
+    });
+    if (perfil === "financeiro") {
+      await assert.rejects(executar(), /Acesso nao autorizado/);
+      assert.equal(consultas, 0);
+    } else {
+      await executar();
+      assert.equal(consultas, 1);
+    }
+  }
 });

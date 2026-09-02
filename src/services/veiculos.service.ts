@@ -6,12 +6,22 @@ import {
   validarTransicaoStatusVeiculo,
   type DadosAtualizacaoVeiculo,
   type DadosCriacaoVeiculo,
+  type ListagemResumidaVeiculos,
   type ListagemVeiculos,
   type Veiculo,
+  type VeiculoListagem,
 } from "@/core/veiculos";
-import { CODIGOS_PERMISSAO_ACESSO, type ContextoAcesso } from "@/core/acesso";
-import type { Oportunidade } from "@/types/oportunidade";
-import { exigirPermissao } from "./acesso.service";
+import type { OportunidadeDisponivelParaVeiculo } from "@/core/veiculos/types";
+import {
+  CODIGOS_PERMISSAO_ACESSO,
+  possuiPermissao,
+  type ContextoAcesso,
+} from "@/core/acesso";
+import {
+  exigirPermissao,
+  obterContextoAcessoAutenticadoAtual,
+  type ContextoAcessoAutenticado,
+} from "./acesso.service";
 import { obterUsuarioAtualAutenticado, type UsuarioAutenticado } from "./auth.service";
 
 export type DadosFormularioVeiculo = {
@@ -35,19 +45,41 @@ export type DadosFormularioAtualizacaoVeiculo = Omit<
   "oportunidadeId"
 >;
 
-export type OportunidadeParaVeiculo = Pick<
-  Oportunidade,
-  "id" | "proprietario_nome" | "veiculo_informado" | "placa"
->;
+export type OportunidadeParaVeiculo = OportunidadeDisponivelParaVeiculo;
+
+export type FichaVeiculo = {
+  veiculo: Veiculo;
+  oportunidade: OportunidadeParaVeiculo | null;
+  permissoes: {
+    editar: boolean;
+    concluirPreparacao: boolean;
+    concluirPublicacao: boolean;
+  };
+};
+
+export type ResultadoAberturaListagemVeiculos =
+  | { estado: "nao_autenticado" }
+  | { estado: "acesso_negado" }
+  | {
+      estado: "carregado";
+      veiculos: readonly VeiculoListagem[];
+      permissoes: { criar: boolean };
+    };
 
 export type DependenciasVeiculos = {
   listar: () => Promise<ListagemVeiculos>;
+  listarResumo: () => Promise<ListagemResumidaVeiculos>;
   criar: (dados: DadosCriacaoVeiculo) => Promise<Veiculo>;
   obterPorId: (id: string) => Promise<Veiculo | null>;
+  obterFichaPorId: (id: string) => Promise<{
+    veiculo: Veiculo;
+    oportunidade: OportunidadeParaVeiculo | null;
+  } | null>;
   atualizar: (id: string, dados: DadosAtualizacaoVeiculo) => Promise<Veiculo | null>;
   marcarProntoParaAnunciar: (id: string) => Promise<Veiculo | null>;
   marcarDisponivel: (id: string) => Promise<Veiculo | null>;
   obterUsuario: () => Promise<UsuarioAutenticado | null>;
+  obterAutoridade: () => Promise<ContextoAcessoAutenticado | null>;
   exigirVisualizacao: () => Promise<ContextoAcesso>;
   exigirCriacao: () => Promise<ContextoAcesso>;
   exigirAlteracao: () => Promise<ContextoAcesso>;
@@ -66,12 +98,17 @@ export type DependenciasVeiculos = {
     veiculoAnterior: Veiculo,
     veiculoAtualizado: Veiculo
   ) => Promise<void>;
-  listarOportunidades: () => Promise<Oportunidade[]>;
+  listarOportunidadesDisponiveis: () => Promise<readonly OportunidadeDisponivelParaVeiculo[]>;
 };
 
 async function listarPersistidos(): Promise<ListagemVeiculos> {
   const { listarVeiculosPersistidos } = await import("@/lib/veiculos/veiculos.repository");
   return listarVeiculosPersistidos();
+}
+
+async function listarResumoPersistido(): Promise<ListagemResumidaVeiculos> {
+  const { listarResumoVeiculosPersistidos } = await import("@/lib/veiculos/veiculos.repository");
+  return listarResumoVeiculosPersistidos();
 }
 
 async function criarPersistido(dados: DadosCriacaoVeiculo): Promise<Veiculo> {
@@ -82,6 +119,14 @@ async function criarPersistido(dados: DadosCriacaoVeiculo): Promise<Veiculo> {
 async function obterPersistidoPorId(id: string): Promise<Veiculo | null> {
   const { obterVeiculoPersistidoPorId } = await import("@/lib/veiculos/veiculos.repository");
   return obterVeiculoPersistidoPorId(id);
+}
+
+async function obterFichaPersistidaPorId(id: string): Promise<{
+  veiculo: Veiculo;
+  oportunidade: OportunidadeParaVeiculo | null;
+} | null> {
+  const { obterFichaVeiculoPersistidaPorId } = await import("@/lib/veiculos/veiculos.repository");
+  return obterFichaVeiculoPersistidaPorId(id);
 }
 
 async function atualizarPersistido(
@@ -131,19 +176,22 @@ async function auditarConclusaoPublicacao(
   return registrarAuditoriaConclusaoPublicacaoVeiculo(veiculoAnterior, veiculoAtualizado);
 }
 
-async function listarOportunidadesPublicas(): Promise<Oportunidade[]> {
-  const { listarOportunidades } = await import("./oportunidades.service");
-  return (await listarOportunidades({ itensPorPagina: 1000 })).dados;
+async function listarOportunidadesDisponiveisPersistidas(): Promise<readonly OportunidadeDisponivelParaVeiculo[]> {
+  const { listarOportunidadesDisponiveisParaVeiculoPersistidas } = await import("@/lib/veiculos/veiculos.repository");
+  return listarOportunidadesDisponiveisParaVeiculoPersistidas();
 }
 
 const DEPENDENCIAS_PADRAO: DependenciasVeiculos = {
   listar: listarPersistidos,
+  listarResumo: listarResumoPersistido,
   criar: criarPersistido,
   obterPorId: obterPersistidoPorId,
+  obterFichaPorId: obterFichaPersistidaPorId,
   atualizar: atualizarPersistido,
   marcarProntoParaAnunciar: marcarProntoParaAnunciarPersistido,
   marcarDisponivel: marcarDisponivelPersistido,
   obterUsuario: obterUsuarioAtualAutenticado,
+  obterAutoridade: () => obterContextoAcessoAutenticadoAtual(),
   exigirVisualizacao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_VISUALIZAR),
   exigirCriacao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_CRIAR),
   exigirAlteracao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_ALTERAR),
@@ -153,7 +201,7 @@ const DEPENDENCIAS_PADRAO: DependenciasVeiculos = {
   auditarAlteracao,
   auditarConclusaoPreparacao,
   auditarConclusaoPublicacao,
-  listarOportunidades: listarOportunidadesPublicas,
+  listarOportunidadesDisponiveis: listarOportunidadesDisponiveisPersistidas,
 };
 
 function dependencias(complemento: Partial<DependenciasVeiculos>): DependenciasVeiculos {
@@ -200,20 +248,88 @@ function erroUnicidade(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
 }
 
-export async function obterVeiculoPorId(
+async function obterVeiculoPorIdComContexto(
   id: string,
-  complemento: Partial<DependenciasVeiculos> = {}
+  deps: DependenciasVeiculos
 ): Promise<Veiculo> {
-  const deps = dependencias(complemento);
-  if (await deps.obterUsuario() === null) throw new Error("Acesso não autorizado.");
-  await deps.exigirVisualizacao();
   try {
+
     const veiculo = await deps.obterPorId(id);
+
     if (veiculo === null) throw new Error("nao encontrado");
     return veiculo;
   } catch {
     throw new Error("Veículo não encontrado.");
   }
+}
+
+export async function obterFichaVeiculoPorId(
+  id: string,
+  complemento: Partial<DependenciasVeiculos> = {}
+): Promise<FichaVeiculo> {
+  const deps = dependencias(complemento);
+
+
+  const contexto = await deps.exigirVisualizacao();
+
+
+
+
+  let fichaPersistida: Awaited<ReturnType<DependenciasVeiculos["obterFichaPorId"]>>;
+  try {
+    fichaPersistida = await deps.obterFichaPorId(id);
+  } catch {
+    throw new Error("Veículo não encontrado.");
+  }
+
+  if (fichaPersistida === null) throw new Error("Veículo não encontrado.");
+  const { veiculo, oportunidade } = fichaPersistida;
+
+  return {
+    veiculo,
+    oportunidade,
+    permissoes: {
+      editar: possuiPermissao(
+        contexto,
+        CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_ALTERAR
+      ),
+      concluirPreparacao: possuiPermissao(
+        contexto,
+        CODIGOS_PERMISSAO_ACESSO.VEICULOS_PREPARACAO_CONCLUIR
+      ),
+      concluirPublicacao: possuiPermissao(
+        contexto,
+        CODIGOS_PERMISSAO_ACESSO.VEICULOS_PUBLICACAO_CONCLUIR
+      ),
+    },
+  };
+}
+
+export function criarCarregadorFichaVeiculo(
+  carregar: (id: string) => Promise<FichaVeiculo> = obterFichaVeiculoPorId
+): (id: string) => Promise<FichaVeiculo> {
+  const carregamentosEmAndamento = new Map<string, Promise<FichaVeiculo>>();
+  return (id) => {
+    const existente = carregamentosEmAndamento.get(id);
+    if (existente) return existente;
+
+    const carregamento = carregar(id).finally(() => {
+      if (carregamentosEmAndamento.get(id) === carregamento) {
+        carregamentosEmAndamento.delete(id);
+      }
+    });
+    carregamentosEmAndamento.set(id, carregamento);
+    return carregamento;
+  };
+}
+
+export async function obterVeiculoPorId(
+  id: string,
+  complemento: Partial<DependenciasVeiculos> = {}
+): Promise<Veiculo> {
+  const deps = dependencias(complemento);
+  await deps.exigirVisualizacao();
+  return obterVeiculoPorIdComContexto(id, deps);
 }
 
 export async function atualizarVeiculo(
@@ -249,23 +365,6 @@ export async function atualizarVeiculo(
   if (atualizado === null) throw new Error("Veículo não encontrado.");
   await deps.auditarAlteracao(atualizado, camposAlterados);
   return atualizado;
-}
-
-export async function obterOportunidadeOrigemDoVeiculo(
-  oportunidadeId: string,
-  complemento: Partial<DependenciasVeiculos> = {}
-): Promise<OportunidadeParaVeiculo | null> {
-  const deps = dependencias(complemento);
-  await deps.exigirVisualizacao();
-  try {
-    const oportunidades = await deps.listarOportunidades();
-    const oportunidade = oportunidades.find(({ id }) => id === oportunidadeId);
-    if (!oportunidade) return null;
-    const { id, proprietario_nome, veiculo_informado, placa } = oportunidade;
-    return { id, proprietario_nome, veiculo_informado, placa };
-  } catch {
-    return null;
-  }
 }
 
 export async function marcarVeiculoProntoParaAnunciar(
@@ -346,12 +445,66 @@ export async function listarVeiculos(
   complemento: Partial<DependenciasVeiculos> = {}
 ): Promise<ListagemVeiculos> {
   const deps = dependencias(complemento);
+
   await deps.exigirVisualizacao();
+
   try {
-    return await deps.listar();
+
+    const listagem = await deps.listar();
+
+    return listagem;
   } catch {
     throw new Error("Não foi possível carregar os veículos.");
   }
+}
+
+export async function abrirListagemVeiculos(
+  complemento: Partial<DependenciasVeiculos> = {}
+): Promise<ResultadoAberturaListagemVeiculos> {
+
+  const deps = dependencias(complemento);
+
+
+  const autoridade = await deps.obterAutoridade();
+
+  if (autoridade === null) return { estado: "nao_autenticado" };
+  if (!possuiPermissao(autoridade.contexto, CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_VISUALIZAR)) {
+    return { estado: "acesso_negado" };
+  }
+
+  let listagem: ListagemResumidaVeiculos;
+  try {
+    listagem = await deps.listarResumo();
+  } catch {
+    throw new Error("Não foi possível carregar os veículos.");
+  }
+
+  const resultado: ResultadoAberturaListagemVeiculos = {
+    estado: "carregado",
+    veiculos: listagem.dados,
+    permissoes: {
+      criar: possuiPermissao(
+        autoridade.contexto,
+        CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_CRIAR
+      ),
+    },
+  };
+
+  return resultado;
+}
+
+export function criarCarregadorListagemVeiculos(
+  carregar: () => Promise<ResultadoAberturaListagemVeiculos> = abrirListagemVeiculos
+): () => Promise<ResultadoAberturaListagemVeiculos> {
+  let carregamentoEmAndamento: Promise<ResultadoAberturaListagemVeiculos> | null = null;
+  return () => {
+    if (carregamentoEmAndamento !== null) return carregamentoEmAndamento;
+    const atual = carregar().finally(() => {
+      if (carregamentoEmAndamento === atual) carregamentoEmAndamento = null;
+    });
+    carregamentoEmAndamento = atual;
+    return atual;
+  };
 }
 
 export async function listarOportunidadesDisponiveisParaVeiculo(
@@ -360,16 +513,7 @@ export async function listarOportunidadesDisponiveisParaVeiculo(
   const deps = dependencias(complemento);
   await deps.exigirVisualizacao();
   try {
-    const [oportunidades, veiculos] = await Promise.all([
-      deps.listarOportunidades(),
-      deps.listar(),
-    ]);
-    const vinculadas = new Set(veiculos.dados.map(({ oportunidadeId }) => oportunidadeId));
-    return oportunidades
-      .filter(({ id }) => !vinculadas.has(id))
-      .map(({ id, proprietario_nome, veiculo_informado, placa }) => ({
-        id, proprietario_nome, veiculo_informado, placa,
-      }));
+    return [...await deps.listarOportunidadesDisponiveis()];
   } catch {
     throw new Error("Não foi possível carregar as oportunidades.");
   }

@@ -3,8 +3,11 @@ import {
   type DadosAtualizacaoVeiculo,
   type DadosCriacaoVeiculo,
   type ListagemVeiculos,
+  type ListagemResumidaVeiculos,
   type Veiculo,
+  type VeiculoListagem,
 } from "@/core/veiculos";
+import type { OportunidadeDisponivelParaVeiculo } from "@/core/veiculos/types";
 import { supabase } from "@/lib/supabase";
 
 type LinhaVeiculo = {
@@ -36,12 +39,51 @@ type ResultadoConsultaVeiculos = {
 };
 
 type ExecutarConsultaVeiculos = () => Promise<ResultadoConsultaVeiculos>;
+type LinhaVeiculoListagem = {
+  id: string;
+  placa: string;
+  marca: string;
+  modelo: string;
+  versao: string | null;
+  ano_fabricacao: number;
+  ano_modelo: number;
+  quilometragem: number;
+  proprietario_nome: string;
+  status: Veiculo["status"];
+};
+type ResultadoConsultaResumoVeiculos = {
+  data: LinhaVeiculoListagem[] | null;
+  error: unknown;
+};
+type ExecutarConsultaResumoVeiculos = () => Promise<ResultadoConsultaResumoVeiculos>;
+type LinhaOportunidadeDisponivel = OportunidadeDisponivelParaVeiculo & {
+  veiculos_vinculados: readonly [];
+};
+type ResultadoConsultaOportunidadesDisponiveis = {
+  data: LinhaOportunidadeDisponivel[] | null;
+  error: unknown;
+};
+type ExecutarConsultaOportunidadesDisponiveis = () => Promise<ResultadoConsultaOportunidadesDisponiveis>;
 type ResultadoCriacaoVeiculo = { data: LinhaVeiculo | null; error: unknown };
 type ExecutarCriacaoVeiculo = (
   dados: Record<string, string | number | null>
 ) => Promise<ResultadoCriacaoVeiculo>;
 type ResultadoVeiculo = { data: LinhaVeiculo | null; error: unknown };
 type ExecutarObtencaoVeiculo = (id: string) => Promise<ResultadoVeiculo>;
+type LinhaFichaVeiculo = LinhaVeiculo & {
+  oportunidade: OportunidadeDisponivelParaVeiculo | null;
+};
+type ResultadoConsultaFichaVeiculo = {
+  data: LinhaFichaVeiculo | null;
+  error: unknown;
+};
+type ExecutarConsultaFichaVeiculo = (
+  id: string
+) => Promise<ResultadoConsultaFichaVeiculo>;
+export type FichaVeiculoPersistida = Readonly<{
+  veiculo: Veiculo;
+  oportunidade: OportunidadeDisponivelParaVeiculo | null;
+}>;
 type ExecutarAtualizacaoVeiculo = (
   id: string,
   dados: Record<string, string | number | null>
@@ -88,6 +130,48 @@ async function consultarVeiculos(): Promise<ResultadoConsultaVeiculos> {
     .order("criado_em", { ascending: false });
 }
 
+async function consultarResumoVeiculos(): Promise<ResultadoConsultaResumoVeiculos> {
+  return supabase
+    .from("veiculos")
+    .select("id, placa, marca, modelo, versao, ano_fabricacao, ano_modelo, quilometragem, proprietario_nome, status")
+    .is("arquivado_em", null)
+    .order("criado_em", { ascending: false });
+}
+
+async function consultarOportunidadesDisponiveis(): Promise<ResultadoConsultaOportunidadesDisponiveis> {
+  const { data, error } = await supabase
+    .from("oportunidades")
+    .select(`
+      id,
+      proprietario_nome,
+      veiculo_informado,
+      placa,
+      veiculos_vinculados:veiculos!veiculos_oportunidade_fk(id)
+    `)
+    .is("veiculos_vinculados.arquivado_em", null)
+    .is("veiculos_vinculados", null)
+    .order("created_at", { ascending: false });
+  return {
+    data: data as unknown as LinhaOportunidadeDisponivel[] | null,
+    error,
+  };
+}
+
+function mapearVeiculoListagem(linha: LinhaVeiculoListagem): VeiculoListagem {
+  return Object.freeze({
+    id: linha.id,
+    placa: linha.placa,
+    marca: linha.marca,
+    modelo: linha.modelo,
+    versao: linha.versao,
+    anoFabricacao: linha.ano_fabricacao,
+    anoModelo: linha.ano_modelo,
+    quilometragem: linha.quilometragem,
+    proprietarioNome: linha.proprietario_nome,
+    status: linha.status,
+  });
+}
+
 async function inserirVeiculo(
   dados: Record<string, string | number | null>
 ): Promise<ResultadoCriacaoVeiculo> {
@@ -101,6 +185,48 @@ async function consultarVeiculoPorId(id: string): Promise<ResultadoVeiculo> {
     .eq("id", id)
     .is("arquivado_em", null)
     .maybeSingle();
+}
+
+async function consultarFichaVeiculoPorId(
+  id: string
+): Promise<ResultadoConsultaFichaVeiculo> {
+  const { data, error } = await supabase
+    .from("veiculos")
+    .select(`
+      id,
+      empresa_id,
+      unidade_id,
+      oportunidade_id,
+      proprietario_nome,
+      placa,
+      renavam,
+      chassi,
+      marca,
+      modelo,
+      versao,
+      ano_fabricacao,
+      ano_modelo,
+      cor,
+      quilometragem,
+      codigo_fipe,
+      status,
+      criado_em,
+      atualizado_em,
+      arquivado_em,
+      oportunidade:oportunidades!veiculos_oportunidade_fk(
+        id,
+        proprietario_nome,
+        veiculo_informado,
+        placa
+      )
+    `)
+    .eq("id", id)
+    .is("arquivado_em", null)
+    .maybeSingle();
+  return {
+    data: data as unknown as LinhaFichaVeiculo | null,
+    error,
+  };
 }
 
 async function atualizarVeiculo(
@@ -135,9 +261,46 @@ async function executarTransicaoDisponivel(
 export async function listarVeiculosPersistidos(
   executarConsulta: ExecutarConsultaVeiculos = consultarVeiculos
 ): Promise<ListagemVeiculos> {
+
+
+
+  const { data, error } = await executarConsulta();
+
+
+  if (error) throw error;
+
+  const listagem = criarListagemVeiculos((data ?? []).map(mapearVeiculo));
+
+
+  return listagem;
+}
+
+export async function listarResumoVeiculosPersistidos(
+  executarConsulta: ExecutarConsultaResumoVeiculos = consultarResumoVeiculos
+): Promise<ListagemResumidaVeiculos> {
+
+
+  const { data, error } = await executarConsulta();
+
+  if (error) throw error;
+
+  const dados = Object.freeze((data ?? []).map(mapearVeiculoListagem));
+  const resultado = Object.freeze({ dados, total: dados.length });
+
+  return resultado;
+}
+
+export async function listarOportunidadesDisponiveisParaVeiculoPersistidas(
+  executarConsulta: ExecutarConsultaOportunidadesDisponiveis = consultarOportunidadesDisponiveis
+): Promise<readonly OportunidadeDisponivelParaVeiculo[]> {
   const { data, error } = await executarConsulta();
   if (error) throw error;
-  return criarListagemVeiculos((data ?? []).map(mapearVeiculo));
+  return Object.freeze((data ?? []).map(({
+    id,
+    proprietario_nome,
+    veiculo_informado,
+    placa,
+  }) => Object.freeze({ id, proprietario_nome, veiculo_informado, placa })));
 }
 
 export async function criarVeiculoPersistido(
@@ -171,9 +334,58 @@ export async function obterVeiculoPersistidoPorId(
   id: string,
   executarObtencao: ExecutarObtencaoVeiculo = consultarVeiculoPorId
 ): Promise<Veiculo | null> {
+
+
+
   const { data, error } = await executarObtencao(id);
+
+
   if (error) throw error;
-  return data === null ? null : mapearVeiculo(data);
+
+  const veiculo = data === null ? null : mapearVeiculo(data);
+
+
+  return veiculo;
+}
+
+export async function obterFichaVeiculoPersistidaPorId(
+  id: string,
+  executarConsulta: ExecutarConsultaFichaVeiculo = consultarFichaVeiculoPorId
+): Promise<FichaVeiculoPersistida | null> {
+
+
+  const { data, error } = await executarConsulta(id);
+
+  if (error) throw error;
+  if (data === null) return null;
+
+  const oportunidade = data.oportunidade === null
+    ? null
+    : Object.freeze({
+        id: data.oportunidade.id,
+        proprietario_nome: data.oportunidade.proprietario_nome,
+        veiculo_informado: data.oportunidade.veiculo_informado,
+        placa: data.oportunidade.placa,
+      });
+  const ficha = Object.freeze({
+    veiculo: mapearVeiculo(data),
+    oportunidade,
+  });
+
+  return ficha;
+}
+
+type ResultadoPlacaVeiculo = { data: { placa: string } | null; error: unknown };
+async function consultarPlacaVeiculoPorId(id: string): Promise<ResultadoPlacaVeiculo> {
+  return supabase.from("veiculos").select("placa").eq("id", id).maybeSingle();
+}
+export async function obterPlacaVeiculoPersistidaPorId(id: string, executar = consultarPlacaVeiculoPorId): Promise<string | null> {
+
+
+  const { data, error } = await executar(id);
+
+  if (error) throw error;
+  return data?.placa ?? null;
 }
 
 export async function atualizarVeiculoPersistido(

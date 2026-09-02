@@ -11,8 +11,10 @@ export type {
   CampoAtualizavelVeiculo,
   DadosAtualizacaoVeiculo,
   DadosCriacaoVeiculo,
+  ListagemResumidaVeiculos,
   ListagemVeiculos,
   ResultadoValidacaoVeiculo,
   ResultadoValidacaoTransicaoStatusVeiculo,
   Veiculo,
+  VeiculoListagem,
 } from "./types";

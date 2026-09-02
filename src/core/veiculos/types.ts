@@ -23,6 +23,32 @@ export type Veiculo = {
   arquivadoEm: string | null;
 };
 
+export type VeiculoListagem = Pick<
+  Veiculo,
+  | "id"
+  | "placa"
+  | "marca"
+  | "modelo"
+  | "versao"
+  | "anoFabricacao"
+  | "anoModelo"
+  | "quilometragem"
+  | "proprietarioNome"
+  | "status"
+>;
+
+export type OportunidadeDisponivelParaVeiculo = Readonly<{
+  id: string;
+  proprietario_nome: string;
+  veiculo_informado: string;
+  placa: string;
+}>;
+
+export type ListagemResumidaVeiculos = Readonly<{
+  dados: readonly VeiculoListagem[];
+  total: number;
+}>;
+
 export type DadosCriacaoVeiculo = Omit<
   Veiculo,
   "id" | "status" | "criadoEm" | "atualizadoEm" | "arquivadoEm"

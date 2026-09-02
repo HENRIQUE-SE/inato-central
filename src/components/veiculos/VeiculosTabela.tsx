@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { ROTULOS_STATUS_VEICULO, type Veiculo } from "@/core/veiculos";
+import { ROTULOS_STATUS_VEICULO, type VeiculoListagem } from "@/core/veiculos";
 
-export default function VeiculosTabela({ veiculos }: { veiculos: readonly Veiculo[] }) {
+export default function VeiculosTabela({ veiculos }: { veiculos: readonly VeiculoListagem[] }) {
   return <div className="overflow-x-auto"><table className="w-full text-left text-sm">
     <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>
       {["Placa", "Veículo", "Ano", "Quilometragem", "Proprietário", "Status", "Ação"].map((titulo) => <th key={titulo} className="px-5 py-3">{titulo}</th>)}
