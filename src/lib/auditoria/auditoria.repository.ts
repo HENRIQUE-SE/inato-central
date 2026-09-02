@@ -94,7 +94,8 @@ export async function listarEventosAuditoriaPersistidos({
   modulo,
   acao,
   resultado,
-}: ListarEventosAuditoriaPersistidosParametros = {}): Promise<ListarEventosAuditoriaPersistidosResultado> {
+}: ListarEventosAuditoriaPersistidosParametros = {}, sinal?: AbortSignal): Promise<ListarEventosAuditoriaPersistidosResultado> {
+
   const paginaValida = Math.max(1, pagina);
   const inicio = (paginaValida - 1) * itensPorPagina;
   const fim = inicio + itensPorPagina - 1;
@@ -108,16 +109,24 @@ export async function listarEventosAuditoriaPersistidos({
   if (modulo) consulta = consulta.eq("modulo", modulo);
   if (acao) consulta = consulta.eq("acao", acao);
   if (resultado) consulta = consulta.eq("resultado", resultado);
+  if (sinal) consulta = consulta.abortSignal(sinal);
+
+
 
   const { data, error, count } = await consulta;
+
   if (error) throw error;
 
-  return {
+
+  const resposta = {
     dados: ((data ?? []) as LinhaAuditoria[]).map(paraRegistro),
     total: count ?? 0,
     pagina: paginaValida,
     itensPorPagina,
   };
+
+
+  return resposta;
 }
 
 export async function obterEventoAuditoriaPersistidoPorId(

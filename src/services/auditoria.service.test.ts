@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 import { ACOES_AUDITORIA, ORIGENS_AUDITORIA, RESULTADOS_AUDITORIA } from "@/core/auditoria";
+import { CODIGOS_PERMISSAO_ACESSO, type CodigoPerfilAcesso, type ContextoAcesso } from "@/core/acesso";
+import { obterUnidadeAtual } from "@/core/organizacao";
 import type { RegistroAuditoria } from "@/core/auditoria";
-import { listarAuditoria } from "./auditoria.service";
+import {
+  criarCarregadorAuditoriaParaTela,
+  ehErroConsultaAuditoriaCancelada,
+  ErroConsultaAuditoriaCancelada,
+  listarAuditoria,
+  obterDadosAuditoriaParaTela,
+} from "./auditoria.service";
 
 function registro(sobrescrever: Partial<RegistroAuditoria> = {}): RegistroAuditoria {
   return {
@@ -145,4 +155,201 @@ test("converte erro em mensagem controlada", async () => {
     listarAuditoria({}, async () => { throw new Error("erro técnico"); }, resolverUsuario),
     new Error("Não foi possível carregar a auditoria.")
   );
+});
+
+function contexto(perfil: CodigoPerfilAcesso, autorizado: boolean): ContextoAcesso {
+  const unidade = obterUnidadeAtual();
+  return {
+    vinculo: { id: "vinculo", usuarioId: "usuario-auth-1", empresaId: unidade.empresaId, unidadeId: unidade.id, perfilId: "perfil", ativo: true, criadoEm: "2026-08-07T12:00:00.000Z" },
+    perfil: { id: "perfil", codigo: perfil, nome: perfil, descricao: null, ativo: true, criadoEm: "2026-08-07T12:00:00.000Z" },
+    permissoes: autorizado ? [{ id: "permissao", codigo: CODIGOS_PERMISSAO_ACESSO.AUDITORIA_VISUALIZAR, nome: "Visualizar auditoria", descricao: null, criadoEm: "2026-08-07T12:00:00.000Z" }] : [],
+  };
+}
+
+test("abertura resolve uma única autoridade e deriva dela usuário e cabeçalho", async () => {
+  const usuario = await resolverUsuario();
+  const acesso = contexto("administrador", true);
+  let resolucoes = 0;
+  let usuarioRecebido: unknown;
+  const resultado = await obterDadosAuditoriaParaTela({ pagina: 2, termoPesquisa: "ABC" }, {
+    obterAutoridade: async () => { resolucoes += 1; return { usuario, contexto: acesso }; },
+    listar: async (parametros, recebido) => { usuarioRecebido = recebido; assert.equal(parametros.pagina, 2); assert.equal(parametros.termoPesquisa, "ABC"); return { dados: [], total: 0, pagina: 2, itensPorPagina: 10, totalPaginas: 1 }; },
+  });
+  assert.equal(resolucoes, 1);
+  assert.equal(usuarioRecebido, usuario);
+  assert.equal(resultado.estado, "carregado");
+  if (resultado.estado === "carregado") assert.deepEqual(resultado.usuarioVisivel, { email: usuario.email, perfil: "administrador", unidade: obterUnidadeAtual().nome });
+});
+
+for (const [perfil, autorizado] of [["administrador", true], ["consultor", false], ["teste", false], ["financeiro", false]] as const) {
+  test(`abertura preserva acesso do perfil ${perfil}`, async () => {
+    let consultas = 0;
+    const resultado = await obterDadosAuditoriaParaTela({}, {
+      obterAutoridade: async () => ({ usuario: await resolverUsuario(), contexto: contexto(perfil, autorizado) }),
+      listar: async () => { consultas += 1; return { dados: [], total: 0, pagina: 1, itensPorPagina: 10, totalPaginas: 1 }; },
+    });
+    assert.equal(resultado.estado, autorizado ? "carregado" : "acesso_negado");
+    assert.equal(consultas, autorizado ? 1 : 0);
+  });
+}
+
+test("ausência de autoridade redirecionável não consulta eventos", async () => {
+  let consultou = false;
+  const resultado = await obterDadosAuditoriaParaTela({}, { obterAutoridade: async () => null, listar: async () => { consultou = true; throw new Error(); } });
+  assert.deepEqual(resultado, { estado: "nao_autenticado" });
+  assert.equal(consultou, false);
+});
+
+test("carregador compartilha somente carga idêntica em andamento", async () => {
+  let liberar!: () => void;
+  const espera = new Promise<void>((resolve) => { liberar = resolve; });
+  let chamadas = 0;
+  const carregar = criarCarregadorAuditoriaParaTela(async () => { chamadas += 1; await espera; return { estado: "acesso_negado" }; });
+  const primeira = carregar({ pagina: 1, termoPesquisa: "ABC", modulo: "reservas" });
+  const segunda = carregar({ pagina: 1, termoPesquisa: "ABC", modulo: "reservas" });
+  assert.equal(primeira, segunda);
+  liberar();
+  await Promise.all([primeira, segunda]);
+  assert.equal(chamadas, 1);
+});
+
+test("filtros e páginas diferentes não compartilham carga", async () => {
+  let chamadas = 0;
+  const carregar = criarCarregadorAuditoriaParaTela(async () => { chamadas += 1; return { estado: "acesso_negado" }; });
+  await Promise.all([carregar({ pagina: 1, modulo: "reservas" }), carregar({ pagina: 2, modulo: "reservas" }), carregar({ pagina: 1, modulo: "veiculos" })]);
+  assert.equal(chamadas, 3);
+});
+
+test("carga concluída não vira cache persistente", async () => {
+  let chamadas = 0;
+  const carregar = criarCarregadorAuditoriaParaTela(async () => { chamadas += 1; return { estado: "acesso_negado" }; });
+  await carregar({ pagina: 1 });
+  await carregar({ pagina: 1 });
+  assert.equal(chamadas, 2);
+});
+
+test("falha limpa a Promise e permite nova tentativa", async () => {
+  let chamadas = 0;
+  const carregar = criarCarregadorAuditoriaParaTela(async () => { chamadas += 1; if (chamadas === 1) throw new Error("falha"); return { estado: "acesso_negado" }; });
+  await assert.rejects(carregar({ pagina: 1 }), new Error("falha"));
+  assert.deepEqual(await carregar({ pagina: 1 }), { estado: "acesso_negado" });
+  assert.equal(chamadas, 2);
+});
+
+test("abertura encaminha o sinal de cancelamento ate a consulta persistente", async () => {
+  const controlador = new AbortController();
+  let sinalRecebido: AbortSignal | undefined;
+  await obterDadosAuditoriaParaTela({}, {
+    obterAutoridade: async () => ({ usuario: await resolverUsuario(), contexto: contexto("administrador", true) }),
+    listar: async (_parametros, _usuario, sinal) => {
+      sinalRecebido = sinal;
+      return { dados: [], total: 0, pagina: 1, itensPorPagina: 10, totalPaginas: 1 };
+    },
+  }, controlador.signal);
+  assert.equal(sinalRecebido, controlador.signal);
+});
+
+test("carga identica em andamento preserva a mesma Promise e nao aborta", async () => {
+  let liberar!: () => void;
+  const espera = new Promise<void>((resolve) => { liberar = resolve; });
+  const sinais: AbortSignal[] = [];
+  const carregar = criarCarregadorAuditoriaParaTela(async (_parametros, sinal) => {
+    assert.ok(sinal);
+    sinais.push(sinal);
+    await espera;
+    return { estado: "acesso_negado" };
+  });
+  const primeira = carregar({ pagina: 1, termoPesquisa: "ABC" });
+  const segunda = carregar({ pagina: 1, termoPesquisa: "ABC" });
+  assert.equal(primeira, segunda);
+  assert.equal(sinais.length, 1);
+  assert.equal(sinais[0].aborted, false);
+  liberar();
+  await primeira;
+});
+
+test("nova chave cancela fisicamente a consulta anterior e preserva a atual", async () => {
+  const sinais = new Map<string, AbortSignal>();
+  const carregar = criarCarregadorAuditoriaParaTela(async (parametros, sinal) => {
+    assert.ok(sinal);
+    const termo = parametros.termoPesquisa ?? "";
+    sinais.set(termo, sinal);
+    if (termo === "A") {
+      await new Promise<void>((_resolve, reject) => {
+        sinal.addEventListener("abort", () => reject(new ErroConsultaAuditoriaCancelada()), { once: true });
+      });
+    }
+    return { estado: "acesso_negado" };
+  });
+  const anterior = carregar({ pagina: 1, termoPesquisa: "A" });
+  const atual = carregar({ pagina: 1, termoPesquisa: "AB" });
+  await assert.rejects(anterior, ErroConsultaAuditoriaCancelada);
+  assert.deepEqual(await atual, { estado: "acesso_negado" });
+  assert.equal(sinais.get("A")?.aborted, true);
+  assert.equal(sinais.get("AB")?.aborted, false);
+});
+
+test("mudancas de pagina, modulo, acao e resultado cancelam a chave obsoleta", async () => {
+  const sinais: AbortSignal[] = [];
+  const pendentes: Array<() => void> = [];
+  const carregar = criarCarregadorAuditoriaParaTela(async (_parametros, sinal) => {
+    assert.ok(sinal);
+    sinais.push(sinal);
+    await new Promise<void>((resolve) => {
+      pendentes.push(resolve);
+      sinal.addEventListener("abort", () => resolve(), { once: true });
+    });
+    return { estado: "acesso_negado" };
+  });
+  const pagina = carregar({ pagina: 1, modulo: "reservas" });
+  const filtro = carregar({ pagina: 2, modulo: "reservas" });
+  const modulo = carregar({ pagina: 2, modulo: "veiculos" });
+  const acao = carregar({ pagina: 2, modulo: "veiculos", acao: ACOES_AUDITORIA.ALTERAR });
+  const resultado = carregar({ pagina: 2, modulo: "veiculos", acao: ACOES_AUDITORIA.ALTERAR, resultado: RESULTADOS_AUDITORIA.FALHA });
+  assert.equal(sinais[0].aborted, true);
+  assert.equal(sinais[1].aborted, true);
+  assert.equal(sinais[2].aborted, true);
+  assert.equal(sinais[3].aborted, true);
+  assert.equal(sinais[4].aborted, false);
+  pendentes.at(-1)?.();
+  await Promise.all([pagina, filtro, modulo, acao, resultado]);
+});
+
+test("voltar a chave anterior depois do aborto cria consulta nova", async () => {
+  const sinais: AbortSignal[] = [];
+  const carregar = criarCarregadorAuditoriaParaTela(async (parametros, sinal) => {
+    assert.ok(sinal);
+    sinais.push(sinal);
+    if (parametros.termoPesquisa !== "A" || sinais.length > 2) return { estado: "acesso_negado" };
+    await new Promise<void>((resolve) => sinal.addEventListener("abort", () => resolve(), { once: true }));
+    return { estado: "acesso_negado" };
+  });
+  const primeiraA = carregar({ termoPesquisa: "A" });
+  await carregar({ termoPesquisa: "B" });
+  await primeiraA;
+  await carregar({ termoPesquisa: "A" });
+  assert.equal(sinais.length, 3);
+  assert.notEqual(sinais[0], sinais[2]);
+  assert.equal(sinais[2].aborted, false);
+});
+
+test("cancelamento esperado e distinguido de falha real", async () => {
+  const controlador = new AbortController();
+  const consulta = listarAuditoria({}, async (_parametros, sinal) => {
+    await new Promise<void>((_resolve, reject) => {
+      sinal?.addEventListener("abort", () => reject(new Error("AbortError")), { once: true });
+    });
+    return { dados: [], total: 0, pagina: 1, itensPorPagina: 10 };
+  }, resolverUsuario, controlador.signal);
+  controlador.abort();
+  await assert.rejects(consulta, (erro) => ehErroConsultaAuditoriaCancelada(erro));
+});
+
+test("interface preserva debounce de 400 ms e ignora cancelamento esperado", () => {
+  const componente = readFileSync(join(process.cwd(), "src/components/auditoria/AuditoriaContainer.tsx"), "utf8");
+  assert.match(componente, /setTimeout\([\s\S]*?,\s*400\)/);
+  assert.match(componente, /clearTimeout\(temporizador\)/);
+  assert.match(componente, /const \[termoPesquisa, setTermoPesquisa\]/);
+  assert.match(componente, /if \(!ativo\) return/);
+  assert.match(componente, /ehErroConsultaAuditoriaCancelada\(erroAtual\)/);
 });

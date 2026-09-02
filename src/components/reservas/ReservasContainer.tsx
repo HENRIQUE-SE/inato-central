@@ -1,24 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CODIGOS_PERMISSAO_ACESSO } from "@/core/acesso";
 import { MOTIVOS_CANCELAMENTO_RESERVA, ROTULOS_MOTIVO_CANCELAMENTO_RESERVA, normalizarCancelamentoReserva, validarMotivoCancelamentoReserva } from "@/core/reservas";
-import type { Reserva } from "@/core/reservas";
-import type { Negociacao } from "@/core/negociacoes";
-import type { Veiculo } from "@/core/veiculos";
+import type { ReservaListagem } from "@/core/reservas";
 import AcessoNegado from "@/components/auth/AcessoNegado";
-import { usuarioAtualPossuiPermissao } from "@/services/acesso.service";
-import { obterSessaoAtualAutenticada } from "@/services/auth.service";
-import { listarNegociacoes, listarVeiculosParaConsultaDeNegociacoes } from "@/services/negociacoes.service";
-import { cancelarReserva, listarReservas } from "@/services/reservas.service";
+import { cancelarReserva, obterListagemReservasParaTela } from "@/services/reservas.service";
 import ReservasTabela from "./ReservasTabela";
 
 export default function ReservasContainer() {
   const router = useRouter();
-  const [dados, setDados] = useState<readonly Reserva[]>([]);
-  const [negociacoes, setNegociacoes] = useState<readonly Negociacao[]>([]);
-  const [veiculos, setVeiculos] = useState<readonly Veiculo[]>([]);
+  const [dados, setDados] = useState<readonly ReservaListagem[]>([]);
   const [podeCancelar, setPodeCancelar] = useState(false);
   const [reservaParaCancelar, setReservaParaCancelar] = useState<string | null>(null);
   const [motivo, setMotivo] = useState("");
@@ -29,46 +21,29 @@ export default function ReservasContainer() {
   const [carregando, setCarregando] = useState(true);
 
   const carregar = useCallback(async () => {
-    const [reservas, listaNegociacoes, listaVeiculos] = await Promise.all([
-      listarReservas(),
-      listarNegociacoes({ itensPorPagina: 1000 }),
-      listarVeiculosParaConsultaDeNegociacoes(),
-    ]);
-    setDados(reservas.dados);
-    setNegociacoes(listaNegociacoes.dados);
-    setVeiculos(listaVeiculos);
-  }, []);
+    const resultado = await obterListagemReservasParaTela();
+    if (resultado.estado === "nao_autenticado") { router.replace("/login"); return; }
+    if (resultado.estado === "acesso_negado") { setNegado(true); return; }
+    setDados(resultado.reservas.dados);
+    setPodeCancelar(resultado.podeCancelar);
+  }, [router]);
 
   useEffect(() => {
-    obterSessaoAtualAutenticada()
-      .then(async (sessao) => {
-        if (!sessao) {
-          router.replace("/login");
-          return;
-        }
-        const [visualizar, cancelar] = await Promise.all([
-          usuarioAtualPossuiPermissao(CODIGOS_PERMISSAO_ACESSO.RESERVAS_VISUALIZAR),
-          usuarioAtualPossuiPermissao(CODIGOS_PERMISSAO_ACESSO.RESERVAS_CANCELAR),
-        ]);
-        if (!visualizar) {
-          setNegado(true);
-          return;
-        }
-        setPodeCancelar(cancelar);
-        await carregar();
-      })
+    carregar()
       .catch((erroAtual) => setErro(erroAtual instanceof Error ? erroAtual.message : "Não foi possível concluir a operação."))
       .finally(() => setCarregando(false));
   }, [carregar, router]);
 
   async function confirmarCancelamento() {
     if (!reservaParaCancelar) return;
+    const dadosNormalizados = normalizarCancelamentoReserva(motivo, detalhes);
+    validarMotivoCancelamentoReserva(dadosNormalizados.motivo, dadosNormalizados.detalhes);
     setProcessando(true);
     setErro("");
     try {
-      await cancelarReserva(reservaParaCancelar, motivo, detalhes);
+      const resultado = await cancelarReserva(reservaParaCancelar, motivo, detalhes);
       setReservaParaCancelar(null);
-      await carregar();
+      setDados(resultado.reservas.dados);
     } catch (erroAtual) {
       setErro(erroAtual instanceof Error ? erroAtual.message : "Não foi possível cancelar a reserva.");
     } finally {
@@ -98,7 +73,7 @@ export default function ReservasContainer() {
           </section>
         )}
         <section className="mt-6 overflow-hidden rounded-2xl bg-white shadow-sm">
-          {carregando ? <p className="p-10 text-center">Carregando reservas...</p> : dados.length === 0 ? <p className="p-10 text-center text-slate-500">Ainda não existem reservas.</p> : <ReservasTabela reservas={dados} negociacoes={negociacoes} veiculos={veiculos} podeCancelar={podeCancelar} onCancelar={setReservaParaCancelar} />}
+          {carregando ? <p className="p-10 text-center">Carregando reservas...</p> : dados.length === 0 ? <p className="p-10 text-center text-slate-500">Ainda não existem reservas.</p> : <ReservasTabela reservas={dados} podeCancelar={podeCancelar} onCancelar={setReservaParaCancelar} />}
         </section>
       </div>
     </main>

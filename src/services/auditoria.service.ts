@@ -12,6 +12,12 @@ import type {
   ResultadoAuditoria,
   ValorAuditoria,
 } from "@/core/auditoria";
+import { CODIGOS_PERMISSAO_ACESSO, possuiPermissao } from "@/core/acesso";
+import { obterUnidadeAtual } from "@/core/organizacao";
+import {
+  obterContextoAcessoAutenticadoAtual,
+  type ContextoAcessoAutenticado,
+} from "./acesso.service";
 
 export type AuditoriaItem = {
   id: string;
@@ -37,17 +43,49 @@ export type ListarAuditoriaResultado = {
 };
 
 type ConsultarPersistencia = (
-  parametros: ListarEventosAuditoriaPersistidosParametros
+  parametros: ListarEventosAuditoriaPersistidosParametros,
+  sinal?: AbortSignal
 ) => Promise<ListarEventosAuditoriaPersistidosResultado>;
 type ResolverUsuarioAutenticado = () => Promise<UsuarioAutenticado | null>;
 
+export type ResultadoTelaAuditoria =
+  | { estado: "nao_autenticado" }
+  | { estado: "acesso_negado" }
+  | {
+      estado: "carregado";
+      auditoria: ListarAuditoriaResultado;
+      usuarioVisivel: { email: string; perfil: string; unidade: string };
+    };
+
+export type DependenciasTelaAuditoria = {
+  obterAutoridade: () => Promise<ContextoAcessoAutenticado | null>;
+  listar: (parametros: ListarAuditoriaParametros, usuario: UsuarioAutenticado, sinal?: AbortSignal) => Promise<ListarAuditoriaResultado>;
+};
+
+const DEPENDENCIAS_TELA: DependenciasTelaAuditoria = {
+  obterAutoridade: () => obterContextoAcessoAutenticadoAtual(),
+  listar: (parametros, usuario, sinal) => listarAuditoria(parametros, undefined, async () => usuario, sinal),
+};
+
 async function consultarPersistencia(
-  parametros: ListarEventosAuditoriaPersistidosParametros
+  parametros: ListarEventosAuditoriaPersistidosParametros,
+  sinal?: AbortSignal
 ): Promise<ListarEventosAuditoriaPersistidosResultado> {
   const { listarEventosAuditoriaPersistidos } = await import(
     "@/lib/auditoria/auditoria.repository"
   );
-  return listarEventosAuditoriaPersistidos(parametros);
+  return listarEventosAuditoriaPersistidos(parametros, sinal);
+}
+
+export class ErroConsultaAuditoriaCancelada extends Error {
+  constructor() {
+    super("Consulta de auditoria cancelada.");
+    this.name = "ErroConsultaAuditoriaCancelada";
+  }
+}
+
+export function ehErroConsultaAuditoriaCancelada(erro: unknown): erro is ErroConsultaAuditoriaCancelada {
+  return erro instanceof ErroConsultaAuditoriaCancelada;
 }
 
 const ROTULOS_ACAO: Record<AcaoAuditoria, string> = {
@@ -113,8 +151,10 @@ function transformarRegistro(
 export async function listarAuditoria(
   parametros: ListarAuditoriaParametros = {},
   consultar: ConsultarPersistencia = consultarPersistencia,
-  resolverUsuario: ResolverUsuarioAutenticado = obterUsuarioAtualAutenticado
+  resolverUsuario: ResolverUsuarioAutenticado = obterUsuarioAtualAutenticado,
+  sinal?: AbortSignal
 ): Promise<ListarAuditoriaResultado> {
+
   const parametrosNormalizados = {
     ...parametros,
     pagina: Math.max(1, parametros.pagina ?? 1),
@@ -122,11 +162,14 @@ export async function listarAuditoria(
   };
 
   try {
+
     const [resultado, usuarioAtual] = await Promise.all([
-      consultar(parametrosNormalizados),
+      consultar(parametrosNormalizados, sinal),
       resolverUsuario(),
     ]);
-    return {
+
+
+    const resposta = {
       dados: resultado.dados.map((registro) =>
         transformarRegistro(registro, usuarioAtual)
       ),
@@ -135,7 +178,72 @@ export async function listarAuditoria(
       itensPorPagina: resultado.itensPorPagina,
       totalPaginas: Math.max(1, Math.ceil(resultado.total / resultado.itensPorPagina)),
     };
+
+
+    return resposta;
   } catch {
+    if (sinal?.aborted) {
+
+      throw new ErroConsultaAuditoriaCancelada();
+    }
     throw new Error("Não foi possível carregar a auditoria.");
   }
+}
+
+export async function obterDadosAuditoriaParaTela(
+  parametros: ListarAuditoriaParametros = {},
+  dependencias: DependenciasTelaAuditoria = DEPENDENCIAS_TELA,
+  sinal?: AbortSignal
+): Promise<ResultadoTelaAuditoria> {
+
+
+  const autoridade = await dependencias.obterAutoridade();
+
+  if (autoridade === null) return { estado: "nao_autenticado" };
+  if (!possuiPermissao(autoridade.contexto, CODIGOS_PERMISSAO_ACESSO.AUDITORIA_VISUALIZAR)) {
+    return { estado: "acesso_negado" };
+  }
+
+  const unidade = obterUnidadeAtual();
+  const usuarioVisivel = {
+    email: autoridade.usuario.email,
+    perfil: autoridade.contexto.perfil.nome,
+    unidade: autoridade.contexto.vinculo.unidadeId === unidade.id ? unidade.nome : "Unidade não identificada",
+  };
+
+  const auditoria = await dependencias.listar(parametros, autoridade.usuario, sinal);
+  return { estado: "carregado", auditoria, usuarioVisivel };
+}
+
+export function criarCarregadorAuditoriaParaTela(
+  carregar: (parametros: ListarAuditoriaParametros, sinal?: AbortSignal) => Promise<ResultadoTelaAuditoria> =
+    (parametros, sinal) => obterDadosAuditoriaParaTela(parametros, undefined, sinal)
+): (parametros: ListarAuditoriaParametros) => Promise<ResultadoTelaAuditoria> {
+  const cargasEmAndamento = new Map<string, Promise<ResultadoTelaAuditoria>>();
+  let cargaEfetiva: { chave: string; controlador: AbortController } | null = null;
+  return (parametros) => {
+    const chave = JSON.stringify({
+      pagina: parametros.pagina ?? 1,
+      itensPorPagina: parametros.itensPorPagina ?? 10,
+      termoPesquisa: parametros.termoPesquisa ?? "",
+      modulo: parametros.modulo ?? "",
+      acao: parametros.acao ?? "",
+      resultado: parametros.resultado ?? "",
+    });
+    const existente = cargasEmAndamento.get(chave);
+    if (existente) return existente;
+    if (cargaEfetiva !== null && cargaEfetiva.chave !== chave) {
+      cargasEmAndamento.delete(cargaEfetiva.chave);
+      cargaEfetiva.controlador.abort();
+    }
+    const controlador = new AbortController();
+    cargaEfetiva = { chave, controlador };
+    const atual = carregar(parametros, controlador.signal);
+    const compartilhada = atual.finally(() => {
+      if (cargasEmAndamento.get(chave) === compartilhada) cargasEmAndamento.delete(chave);
+      if (cargaEfetiva?.chave === chave && cargaEfetiva.controlador === controlador) cargaEfetiva = null;
+    });
+    cargasEmAndamento.set(chave, compartilhada);
+    return compartilhada;
+  };
 }

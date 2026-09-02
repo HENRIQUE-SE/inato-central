@@ -1,14 +1,23 @@
-import type { DadosCancelamentoReserva, ListagemReservas, Reserva } from "@/core/reservas";
+import type { DadosCancelamentoReserva, ListagemReservas, ListagemReservasApresentacao, Reserva, ReservaListagem } from "@/core/reservas";
 import { supabase } from "@/lib/supabase";
 type Linha = { id:string;empresa_id:string;unidade_id:string;negociacao_id:string;veiculo_id:string;status:Reserva["status"];criado_por_usuario_id:string;reservado_em:string;expira_em:string;atualizado_em:string;encerrado_em:string|null;motivo_cancelamento:Reserva["motivoCancelamento"];motivo_cancelamento_detalhes:string|null };
 type Resultado = { data: Linha | null; error: unknown };
 type ResultadoLista = { data: Linha[] | null; error: unknown; count: number | null };
+type Relacionamento<T> = T | T[] | null;
+type LinhaListagem = Linha & { negociacao: Relacionamento<{ interessado_nome: string }>; veiculo: Relacionamento<{ placa: string; marca: string; modelo: string; versao: string | null }> };
+type ResultadoListaApresentacao = { data: LinhaListagem[] | null; error: unknown; count: number | null };
 const mapear=(l:Linha):Reserva=>({id:l.id,empresaId:l.empresa_id,unidadeId:l.unidade_id,negociacaoId:l.negociacao_id,veiculoId:l.veiculo_id,status:l.status,criadoPorUsuarioId:l.criado_por_usuario_id,reservadoEm:l.reservado_em,expiraEm:l.expira_em,atualizadoEm:l.atualizado_em,encerradoEm:l.encerrado_em,motivoCancelamento:l.motivo_cancelamento,motivoCancelamentoDetalhes:l.motivo_cancelamento_detalhes});
+const obterRelacionado=<T>(relacionamento:Relacionamento<T>):T|null=>Array.isArray(relacionamento)?relacionamento[0]??null:relacionamento;
+const mapearListagem=(l:LinhaListagem):ReservaListagem=>{const negociacao=obterRelacionado(l.negociacao),veiculo=obterRelacionado(l.veiculo);return{...mapear(l),interessadoNome:negociacao?.interessado_nome??null,veiculoResumo:veiculo?{placa:veiculo.placa,marca:veiculo.marca,modelo:veiculo.modelo,versao:veiculo.versao}:null}};
 async function expirarPadrao():Promise<{error:unknown}>{return supabase.rpc("expirar_reservas_vencidas");}
 async function listarPadrao():Promise<ResultadoLista>{return supabase.from("reservas").select("*",{count:"exact"}).order("reservado_em",{ascending:false});}
+async function obterPadrao(id:string):Promise<Resultado>{return supabase.from("reservas").select("id,empresa_id,unidade_id,negociacao_id,veiculo_id,status,criado_por_usuario_id,reservado_em,expira_em,atualizado_em,encerrado_em,motivo_cancelamento,motivo_cancelamento_detalhes").eq("id",id).maybeSingle();}
+async function listarApresentacaoPadrao():Promise<ResultadoListaApresentacao>{return supabase.from("reservas").select("id,empresa_id,unidade_id,negociacao_id,veiculo_id,status,criado_por_usuario_id,reservado_em,expira_em,atualizado_em,encerrado_em,motivo_cancelamento,motivo_cancelamento_detalhes,negociacao:negociacoes!reservas_negociacao_id_fkey(interessado_nome),veiculo:veiculos!reservas_veiculo_id_fkey(placa,marca,modelo,versao)",{count:"exact"}).order("reservado_em",{ascending:false});}
 async function criarPadrao(negociacaoId:string):Promise<Resultado>{return supabase.rpc("criar_reserva",{p_negociacao_id:negociacaoId}).single();}
 async function cancelarPadrao(id:string,dados:DadosCancelamentoReserva):Promise<Resultado>{return supabase.rpc("cancelar_reserva",{p_reserva_id:id,p_motivo:dados.motivo,p_motivo_detalhes:dados.detalhes}).single();}
 export async function expirarReservasVencidasPersistidas(executar=expirarPadrao):Promise<void>{const {error}=await executar();if(error)throw error;}
-export async function listarReservasPersistidas(executar= listarPadrao):Promise<ListagemReservas>{const {data,error,count}=await executar();if(error)throw error;return {dados:(data??[]).map(mapear),total:count??0};}
+export async function listarReservasPersistidas(executar= listarPadrao):Promise<ListagemReservas>{const {data,error,count}=await executar();if(error)throw error;const resultado={dados:(data??[]).map(mapear),total:count??0};return resultado;}
+export async function obterReservaPersistidaPorId(id:string,executar=obterPadrao):Promise<Reserva|null>{const{data,error}=await executar(id);if(error)throw error;return data?mapear(data):null;}
+export async function listarReservasComDadosRelacionadosPersistidas(executar=listarApresentacaoPadrao):Promise<ListagemReservasApresentacao>{const {data,error,count}=await executar();if(error)throw error;const resultado={dados:(data??[]).map(mapearListagem),total:count??0};return resultado;}
 export async function criarReservaPersistida(negociacaoId:string,executar=criarPadrao):Promise<Reserva>{const {data,error}=await executar(negociacaoId);if(error)throw error;if(!data)throw new Error("Reserva não retornada.");return mapear(data);}
-export async function cancelarReservaPersistida(id:string,dados:DadosCancelamentoReserva,executar=cancelarPadrao):Promise<Reserva>{const {data,error}=await executar(id,dados);if(error)throw error;if(!data)throw new Error("Reserva não retornada.");return mapear(data);}
+export async function cancelarReservaPersistida(id:string,dados:DadosCancelamentoReserva,executar=cancelarPadrao):Promise<Reserva>{const {data,error}=await executar(id,dados);if(error)throw error;if(!data)throw new Error("Reserva não retornada.");const reserva=mapear(data);return reserva;}

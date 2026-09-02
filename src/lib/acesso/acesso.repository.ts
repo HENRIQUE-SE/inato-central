@@ -6,10 +6,67 @@ type LinhaVinculo = { id: string; usuario_id: string; empresa_id: string; unidad
 type LinhaPerfil = { id: string; codigo: CodigoPerfilAcesso; nome: string; descricao: string | null; ativo: boolean; criado_em: string };
 type LinhaPermissao = { id: string; codigo: CodigoPermissaoAcesso; nome: string; descricao: string | null; criado_em: string };
 type LinhaPerfilPermissao = { permissao_id: string };
+type LinhaRelacaoPermissao = { permissao: LinhaPermissao | null };
+type LinhaPerfilRelacional = LinhaPerfil & { relacoes_permissoes: LinhaRelacaoPermissao[] | null };
+type LinhaContextoRelacional = LinhaVinculo & { perfil: LinhaPerfilRelacional | null };
+type ResultadoConsultaContextoRelacional = { data: LinhaContextoRelacional | null; error: unknown };
+type ConsultarContextoRelacional = (usuarioId: string, empresaId: string) => Promise<ResultadoConsultaContextoRelacional>;
+
+const SELECAO_CONTEXTO_RELACIONAL = `
+  id,
+  usuario_id,
+  empresa_id,
+  unidade_id,
+  perfil_id,
+  ativo,
+  criado_em,
+  perfil:perfis!usuarios_perfis_perfil_id_fkey(
+    id,
+    codigo,
+    nome,
+    descricao,
+    ativo,
+    criado_em,
+    relacoes_permissoes:perfil_permissoes!perfil_permissoes_perfil_id_fkey(
+      permissao:permissoes!perfil_permissoes_permissao_id_fkey(
+        id,
+        codigo,
+        nome,
+        descricao,
+        criado_em
+      )
+    )
+  )
+`;
 
 function mapearVinculo(linha: LinhaVinculo): VinculoAcesso { return { id: linha.id, usuarioId: linha.usuario_id, empresaId: linha.empresa_id, unidadeId: linha.unidade_id, perfilId: linha.perfil_id, ativo: linha.ativo, criadoEm: linha.criado_em }; }
 function mapearPerfil(linha: LinhaPerfil): PerfilAcesso { return { id: linha.id, codigo: linha.codigo, nome: linha.nome, descricao: linha.descricao, ativo: linha.ativo, criadoEm: linha.criado_em }; }
 function mapearPermissao(linha: LinhaPermissao): PermissaoAcesso { return { id: linha.id, codigo: linha.codigo, nome: linha.nome, descricao: linha.descricao, criadoEm: linha.criado_em }; }
+
+async function consultarContextoRelacional(usuarioId: string, empresaId: string): Promise<ResultadoConsultaContextoRelacional> {
+  const { data, error } = await supabase
+    .from("usuarios_perfis")
+    .select(SELECAO_CONTEXTO_RELACIONAL)
+    .eq("usuario_id", usuarioId)
+    .eq("empresa_id", empresaId)
+    .eq("ativo", true)
+    .eq("perfil.ativo", true)
+    .maybeSingle();
+  return { data: data as unknown as LinhaContextoRelacional | null, error };
+}
+
+function mapearContextoRelacional(linha: LinhaContextoRelacional, usuarioId: string, empresaId: string): ContextoAcesso | null {
+  if (!linha.ativo || linha.usuario_id !== usuarioId || linha.empresa_id !== empresaId) return null;
+  const perfil = linha.perfil;
+  if (perfil === null || !perfil.ativo || perfil.id !== linha.perfil_id || !Array.isArray(perfil.relacoes_permissoes)) return null;
+  const permissoes: PermissaoAcesso[] = [];
+  for (const relacao of perfil.relacoes_permissoes) {
+    if (relacao?.permissao === null || relacao?.permissao === undefined) return null;
+    permissoes.push(mapearPermissao(relacao.permissao));
+  }
+  permissoes.sort((a, b) => a.codigo.localeCompare(b.codigo));
+  return { vinculo: mapearVinculo(linha), perfil: mapearPerfil(perfil), permissoes };
+}
 
 export async function obterVinculoDoUsuario(usuarioId: string): Promise<VinculoAcesso | null> {
   const { empresaId } = obterContextoOrganizacional();
@@ -44,9 +101,11 @@ export async function listarPermissoesDoUsuario(usuarioId: string): Promise<Perm
   return vinculo === null ? [] : listarPermissoesPorPerfil(vinculo.perfilId);
 }
 
-export async function obterContextoPersistidoDoUsuario(usuarioId: string): Promise<ContextoAcesso | null> {
-  const vinculo = await obterVinculoDoUsuario(usuarioId);
-  if (vinculo === null) return null;
-  const [perfil, permissoes] = await Promise.all([obterPerfilPorId(vinculo.perfilId), listarPermissoesPorPerfil(vinculo.perfilId)]);
-  return perfil === null ? null : { vinculo, perfil, permissoes };
+export async function obterContextoPersistidoDoUsuario(usuarioId: string, consultar: ConsultarContextoRelacional = consultarContextoRelacional): Promise<ContextoAcesso | null> {
+  const { empresaId } = obterContextoOrganizacional();
+  const { data, error } = await consultar(usuarioId, empresaId);
+  if (error) throw error;
+  if (data === null) return null;
+  const contexto = mapearContextoRelacional(data, usuarioId, empresaId);
+  return contexto;
 }

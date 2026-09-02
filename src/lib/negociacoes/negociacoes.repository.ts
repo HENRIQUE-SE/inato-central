@@ -24,10 +24,17 @@ function executorRpc(nome: string): ExecutorEncerramentoNegociacao { return asyn
 
 export async function listarNegociacoesPersistidas(filtros: FiltrosNegociacoes = {}, executar: ExecutorListagemNegociacoes = executarLista): Promise<ListagemNegociacoes> {
   const completos = { pesquisa: filtros.pesquisa?.trim() ?? "", status: filtros.status ?? "todos", pagina: filtros.pagina ?? 1, itensPorPagina: filtros.itensPorPagina ?? 10 };
-  const { data, error, count } = await executar(completos); if (error) throw error;
-  return { dados: (data ?? []).map(mapear), total: count ?? 0, pagina: completos.pagina, itensPorPagina: completos.itensPorPagina };
+
+
+  const { data, error, count } = await executar(completos);
+
+  if (error) throw error;
+
+  const resultado = { dados: (data ?? []).map(mapear), total: count ?? 0, pagina: completos.pagina, itensPorPagina: completos.itensPorPagina };
+
+  return resultado;
 }
-export async function obterNegociacaoPersistidaPorId(id: string, executar: ExecutorObtencaoNegociacao = executarObtencao): Promise<Negociacao | null> { const { data, error } = await executar(id); if (error) throw error; return data ? mapear(data) : null; }
+export async function obterNegociacaoPersistidaPorId(id: string, executar: ExecutorObtencaoNegociacao = executarObtencao): Promise<Negociacao | null> {   const { data, error } = await executar(id);  if (error) throw error;  const negociacao = data ? mapear(data) : null;  return negociacao; }
 export async function criarNegociacaoPersistida(dados: DadosCriacaoNegociacao, executar: ExecutorCriacaoNegociacao = executarCriacao): Promise<Negociacao> { const { data, error } = await executar({ empresa_id: dados.empresaId, unidade_id: dados.unidadeId, veiculo_id: dados.veiculoId, interessado_nome: dados.interessadoNome, interessado_telefone: dados.interessadoTelefone, origem: dados.origem, observacoes: dados.observacoes, criado_por_usuario_id: dados.criadoPorUsuarioId }); if (error) throw error; if (!data) throw new Error("Negociação não retornada."); return mapear(data); }
 export async function atualizarNegociacaoPersistida(id: string, dados: DadosAtualizacaoNegociacao, executar: ExecutorAtualizacaoNegociacao = executarAtualizacao): Promise<Negociacao | null> { const { data, error } = await executar(id, { interessado_nome: dados.interessadoNome, interessado_telefone: dados.interessadoTelefone, origem: dados.origem, observacoes: dados.observacoes, atualizado_em: new Date().toISOString() }); if (error) throw error; return data ? mapear(data) : null; }
 async function encerrar(id: string, executar: ExecutorEncerramentoNegociacao): Promise<Negociacao | null> { const { data, error } = await executar({ p_negociacao_id: id }); if (error) throw error; return data ? mapear(data) : null; }

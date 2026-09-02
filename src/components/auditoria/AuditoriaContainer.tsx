@@ -1,12 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { listarAuditoria, type AuditoriaItem } from "@/services/auditoria.service";
-import { obterSessaoAtualAutenticada } from "@/services/auth.service";
-import { obterUsuarioAtualAutenticado } from "@/services/auth.service";
-import { exigirPermissao } from "@/services/acesso.service";
-import { CODIGOS_PERMISSAO_ACESSO } from "@/core/acesso";
-import { obterUnidadeAtual } from "@/core/organizacao";
+import { useEffect, useRef, useState } from "react";
+import { criarCarregadorAuditoriaParaTela, ehErroConsultaAuditoriaCancelada, type AuditoriaItem } from "@/services/auditoria.service";
 import { useRouter } from "next/navigation";
 import type { AcaoAuditoria, ResultadoAuditoria } from "@/core/auditoria";
 import AuditoriaCarregando from "./AuditoriaCarregando";
@@ -22,8 +17,11 @@ const INICIAIS: FiltrosAuditoria = { termoPesquisa: "", modulo: "", acao: "", re
 
 export default function AuditoriaContainer() {
   const router = useRouter();
+  const carregadorRef = useRef<ReturnType<typeof criarCarregadorAuditoriaParaTela> | null>(null);
+  const carregarAuditoria = carregadorRef.current ??= criarCarregadorAuditoriaParaTela();
   const [dados, setDados] = useState<AuditoriaItem[]>([]);
   const [filtros, setFiltros] = useState(INICIAIS);
+  const [termoPesquisa, setTermoPesquisa] = useState("");
   const [pagina, setPagina] = useState(1);
   const [totalPaginas, setTotalPaginas] = useState(1);
   const [carregando, setCarregando] = useState(true);
@@ -32,35 +30,31 @@ export default function AuditoriaContainer() {
   const [usuarioVisivel, setUsuarioVisivel] = useState<{ email: string; perfil: string; unidade: string } | null>(null);
 
   useEffect(() => {
+    const temporizador = setTimeout(() => {
+      setTermoPesquisa(filtros.termoPesquisa);
+      setPagina(1);
+    }, 400);
+    return () => clearTimeout(temporizador);
+  }, [filtros.termoPesquisa]);
+
+  useEffect(() => {
     let ativo = true;
     setCarregando(true);
     setErro(false);
     setAcessoNegado(false);
-    Promise.all([obterSessaoAtualAutenticada(), obterUsuarioAtualAutenticado()]).then(async ([sessao, usuario]) => {
-      if (sessao === null) { router.replace("/login"); return null; }
-      if (usuario === null) { router.replace("/login"); return null; }
-      let contextoAcesso;
-      try {
-        contextoAcesso = await exigirPermissao(CODIGOS_PERMISSAO_ACESSO.AUDITORIA_VISUALIZAR);
-      } catch {
-        if (ativo) { setAcessoNegado(true); setCarregando(false); }
-        return null;
-      }
-      if (!ativo) return null;
-      const unidade = obterUnidadeAtual();
-      setUsuarioVisivel({
-        email: usuario.email,
-        perfil: contextoAcesso.perfil.nome,
-        unidade: contextoAcesso.vinculo.unidadeId === unidade.id ? unidade.nome : "Unidade não identificada",
-      });
-      return listarAuditoria({
+    carregarAuditoria({
       pagina,
       itensPorPagina: 10,
-      termoPesquisa: filtros.termoPesquisa,
+      termoPesquisa,
       modulo: filtros.modulo || undefined,
       acao: (filtros.acao || undefined) as AcaoAuditoria | undefined,
       resultado: (filtros.resultado || undefined) as ResultadoAuditoria | undefined,
-      });
+    }).then((resultado) => {
+      if (!ativo) return null;
+      if (resultado.estado === "nao_autenticado") { router.replace("/login"); return null; }
+      if (resultado.estado === "acesso_negado") { setAcessoNegado(true); setCarregando(false); return null; }
+      setUsuarioVisivel(resultado.usuarioVisivel);
+      return resultado.auditoria;
     }).then((resultado) => {
       if (!ativo || resultado === null) return;
       if (pagina > resultado.totalPaginas) {
@@ -70,13 +64,14 @@ export default function AuditoriaContainer() {
       setDados(resultado.dados);
       setTotalPaginas(resultado.totalPaginas);
       setCarregando(false);
-    }).catch(() => {
+    }).catch((erroAtual) => {
       if (!ativo) return;
+      if (ehErroConsultaAuditoriaCancelada(erroAtual)) return;
       setErro(true);
       setCarregando(false);
     });
     return () => { ativo = false; };
-  }, [filtros, pagina, router]);
+  }, [carregarAuditoria, filtros.modulo, filtros.acao, filtros.resultado, termoPesquisa, pagina, router]);
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">

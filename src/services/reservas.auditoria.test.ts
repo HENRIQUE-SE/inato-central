@@ -7,6 +7,7 @@ import type { Reserva } from "@/core/reservas";
 import type { Veiculo } from "@/core/veiculos";
 import {
   registrarAuditoriaCancelamentoReserva,
+  registrarAuditoriaCancelamentoReservaComAutoridadeInterna,
   registrarAuditoriaCriacaoReserva,
   type DependenciasAuditoriaReservas,
 } from "./reservas.auditoria";
@@ -61,3 +62,5 @@ test("nao registra identidade ficticia sem usuario", async () => {
     new Error("Não foi possível registrar a auditoria da reserva."),
   );
 });
+test("auditoria interna reutiliza identidade e contexto confiáveis",async()=>{const eventos:RegistroAuditoria[]=[];const cancelada={...reserva,status:"cancelada"as const,encerradoEm:"fim",motivoCancelamento:"cliente_desistiu"as const};await registrarAuditoriaCancelamentoReservaComAutoridadeInterna(cancelada,reserva.negociacaoId,"ABC1234",{usuario:{id:"u",email:"consultor@inato.com"},contexto},async evento=>{eventos.push(evento);return evento});assert.equal(eventos[0].usuarioId,"u");assert.equal(eventos[0].empresaId,"e");assert.equal(eventos[0].unidadeId,"un");assert.equal(eventos[0].detalhes?.perfilCodigo,"consultor");assert.equal(eventos[0].detalhes?.negociacaoId,"n");assert.equal(eventos[0].detalhes?.placa,"ABC1234")});
+test("auditoria interna rejeita autoridade fora do contexto da Reserva",async()=>assert.rejects(registrarAuditoriaCancelamentoReservaComAutoridadeInterna(reserva,"n","ABC1234",{usuario:{id:"outro",email:"x@inato.com"},contexto},async evento=>evento),new Error("Não foi possível registrar a auditoria da reserva.")));
