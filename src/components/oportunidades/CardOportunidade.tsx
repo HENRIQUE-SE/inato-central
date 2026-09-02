@@ -6,12 +6,16 @@ type CardOportunidadeProps = {
   oportunidade: Oportunidade;
   onEditar: (oportunidade: Oportunidade) => void;
   onExcluir: (id: string) => void;
+  podeEditar: boolean;
+  podeExcluir: boolean;
 };
 
 export default function CardOportunidade({
   oportunidade,
   onEditar,
   onExcluir,
+  podeEditar,
+  podeExcluir,
 }: CardOportunidadeProps) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -41,6 +45,8 @@ export default function CardOportunidade({
         onVer={() => alert("Visualização em desenvolvimento.")}
        onEditar={() => onEditar(oportunidade)}
         onExcluir={() => onExcluir(oportunidade.id)}
+        podeEditar={podeEditar}
+        podeExcluir={podeExcluir}
       />
     </div>
   );

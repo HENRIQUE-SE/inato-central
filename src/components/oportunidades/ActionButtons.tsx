@@ -2,12 +2,16 @@ type ActionButtonsProps = {
   onVer: () => void;
   onEditar: () => void;
   onExcluir: () => void;
+  podeEditar: boolean;
+  podeExcluir: boolean;
 };
 
 export default function ActionButtons({
   onVer,
   onEditar,
   onExcluir,
+  podeEditar,
+  podeExcluir,
 }: ActionButtonsProps) {
   return (
     <div className="mt-3 flex justify-end gap-2">
@@ -18,19 +22,19 @@ export default function ActionButtons({
         👁 Ver
       </button>
 
-      <button
+      {podeEditar && <button
         onClick={onEditar}
         className="rounded-lg border border-blue-300 px-3 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50"
       >
         ✏ Editar
-      </button>
+      </button>}
 
-      <button
+      {podeExcluir && <button
         onClick={onExcluir}
         className="rounded-lg border border-red-300 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
       >
         🗑 Excluir
-      </button>
+      </button>}
     </div>
   );
 }

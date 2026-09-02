@@ -8,6 +8,7 @@ import {
   listarOportunidades,
 } from "@/services/oportunidades.service";
 import type { Oportunidade } from "@/types/oportunidade";
+import AcessoNegado from "@/components/auth/AcessoNegado";
 import CardOportunidade from "@/components/oportunidades/CardOportunidade";
 import FormOportunidade from "@/components/oportunidades/FormOportunidade";
 export default function OportunidadesContainer() {
@@ -20,18 +21,30 @@ export default function OportunidadesContainer() {
   const [placa, setPlaca] = useState("");
   const [origem, setOrigem] = useState("Instagram");
   const [salvando, setSalvando] = useState(false);
+  const [mensagem, setMensagem] = useState("");
+  const [mensagemErro, setMensagemErro] = useState("");
 const [oportunidades, setOportunidades] = useState<Oportunidade[]>([]);
+const [permissoes, setPermissoes] = useState({
+  visualizar: false,
+  criar: false,
+  alterar: false,
+  excluir: false,
+});
+const [acessoNegado, setAcessoNegado] = useState(false);
 const [oportunidadeEmEdicao, setOportunidadeEmEdicao] =
   useState<Oportunidade | null>(null);
 async function carregarOportunidades() {
   try {
-    const { dados } = await listarOportunidades({ itensPorPagina: 1000 });
-    setOportunidades(dados);
+    const resultado = await listarOportunidades({ itensPorPagina: 1000 });
+    setOportunidades(resultado.dados);
+    setPermissoes(resultado.permissoes);
+    setAcessoNegado(false);
   } catch {
-    alert("Não foi possível carregar as oportunidades.");
+    setAcessoNegado(true);
   }
 }
 function iniciarEdicao(oportunidade: Oportunidade) {
+  if (!permissoes.alterar) return;
   setOportunidadeEmEdicao(oportunidade);
 
   setProprietarioNome(oportunidade.proprietario_nome);
@@ -44,6 +57,7 @@ function iniciarEdicao(oportunidade: Oportunidade) {
   setShowForm(true);
 }
 async function excluirOportunidadeSelecionada(id: string) {
+  if (!permissoes.excluir) return;
   const confirmar = confirm(
     "Tem certeza que deseja excluir esta oportunidade?"
   );
@@ -61,13 +75,36 @@ async function excluirOportunidadeSelecionada(id: string) {
 
   alert("Oportunidade excluída com sucesso.");
 
-  carregarOportunidades();
+  await carregarOportunidades();
 }
 useEffect(() => {
   carregarOportunidades();
 }, []);
 
+useEffect(() => {
+  if (
+    showForm
+    && ((oportunidadeEmEdicao !== null && !permissoes.alterar)
+      || (oportunidadeEmEdicao === null && !permissoes.criar))
+  ) {
+    setOportunidadeEmEdicao(null);
+    setShowForm(false);
+  }
+}, [oportunidadeEmEdicao, permissoes.alterar, permissoes.criar, showForm]);
+
+function abrirCriacao() {
+  if (!permissoes.criar) return;
+  setOportunidadeEmEdicao(null);
+  setShowForm(true);
+}
+
   async function salvarOportunidade() {
+    if (
+      (oportunidadeEmEdicao !== null && !permissoes.alterar)
+      || (oportunidadeEmEdicao === null && !permissoes.criar)
+    ) return;
+    setMensagem("");
+    setMensagemErro("");
     if (
       !proprietarioNome ||
       !telefone ||
@@ -75,7 +112,7 @@ useEffect(() => {
       !veiculoInformado ||
       !placa
     ) {
-      alert("Preencha todos os campos obrigatórios.");
+      setMensagemErro("Preencha todos os campos obrigatórios.");
       return;
     }
 
@@ -92,23 +129,24 @@ useEffect(() => {
 };
 
 try {
+  let oportunidadePersistida: Oportunidade;
   if (oportunidadeEmEdicao) {
-    await atualizarOportunidade(
+    oportunidadePersistida = await atualizarOportunidade(
       oportunidadeEmEdicao.id,
       dadosOportunidade
     );
+    setOportunidades((atuais) => atuais.map((item) => item.id === oportunidadePersistida.id ? oportunidadePersistida : item));
   } else {
-    await criarOportunidade(dadosOportunidade);
+    oportunidadePersistida = await criarOportunidade(dadosOportunidade);
+    setOportunidades((atuais) => [oportunidadePersistida, ...atuais]);
   }
-} catch (error) {
+} catch {
   setSalvando(false);
-  alert(JSON.stringify(error, null, 2));
+  setMensagemErro("Não foi possível salvar a oportunidade.");
   return;
 }
 
     setSalvando(false);
-
-    alert("Oportunidade salva com sucesso!");
 
     setProprietarioNome("");
     setTelefone("");
@@ -119,7 +157,11 @@ try {
 
 setOportunidadeEmEdicao(null);
     setShowForm(false);
+    setMensagemErro("");
+    setMensagem("Oportunidade salva com sucesso!");
   }
+
+  if (acessoNegado) return <AcessoNegado />;
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
@@ -142,13 +184,16 @@ setOportunidadeEmEdicao(null);
             </p>
           </div>
 
-          <button
-            onClick={() => setShowForm(!showForm)}
+          {permissoes.criar && <button
+            onClick={abrirCriacao}
             className="rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
           >
             + Nova oportunidade
-          </button>
+          </button>}
         </div>
+
+        {mensagem && <p className="mt-5 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">{mensagem}</p>}
+        {mensagemErro && <p className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">{mensagemErro}</p>}
 
         {/* FORMULÁRIO */}
 {showForm && (
@@ -227,12 +272,12 @@ setOportunidadeEmEdicao(null);
         Quando uma nova oportunidade for cadastrada, ela aparecerá nesta área.
       </p>
 
-      <button
-        onClick={() => setShowForm(true)}
+      {permissoes.criar && <button
+        onClick={abrirCriacao}
         className="mt-5 text-sm font-semibold text-slate-900 underline underline-offset-4"
       >
         Cadastrar primeira oportunidade
-      </button>
+      </button>}
     </div>
   </div>
 ) : (
@@ -243,6 +288,8 @@ setOportunidadeEmEdicao(null);
   oportunidade={oportunidade}
   onEditar={iniciarEdicao}
   onExcluir={excluirOportunidadeSelecionada}
+  podeEditar={permissoes.alterar}
+  podeExcluir={permissoes.excluir}
 />
 ))}
   </div>
