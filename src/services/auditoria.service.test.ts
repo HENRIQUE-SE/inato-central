@@ -160,7 +160,7 @@ test("converte erro em mensagem controlada", async () => {
 function contexto(perfil: CodigoPerfilAcesso, autorizado: boolean): ContextoAcesso {
   const unidade = obterUnidadeAtual();
   return {
-    vinculo: { id: "vinculo", usuarioId: "usuario-auth-1", empresaId: unidade.empresaId, unidadeId: unidade.id, perfilId: "perfil", ativo: true, criadoEm: "2026-08-07T12:00:00.000Z" },
+    vinculo: { id: "vinculo", usuarioId: "usuario-auth-1", redeId: "rede-matriz", operacaoId: "operacao-matriz", areaOperacionalId: "area-patrocinio", escopoTipo: "unidade", empresaId: unidade.empresaId, unidadeId: unidade.id, perfilId: "perfil", ativo: true, criadoEm: "2026-08-07T12:00:00.000Z" },
     perfil: { id: "perfil", codigo: perfil, nome: perfil, descricao: null, ativo: true, criadoEm: "2026-08-07T12:00:00.000Z" },
     permissoes: autorizado ? [{ id: "permissao", codigo: CODIGOS_PERMISSAO_ACESSO.AUDITORIA_VISUALIZAR, nome: "Visualizar auditoria", descricao: null, criadoEm: "2026-08-07T12:00:00.000Z" }] : [],
   };

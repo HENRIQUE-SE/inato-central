@@ -13,7 +13,7 @@ import {
 } from "./reservas.auditoria";
 
 const contexto: ContextoAcesso = {
-  vinculo: { id: "x", usuarioId: "u", empresaId: "e", unidadeId: "un", perfilId: "p", ativo: true, criadoEm: "c" },
+  vinculo: { id: "x", usuarioId: "u", redeId: "rede-matriz", operacaoId: "operacao-matriz", areaOperacionalId: "area-patrocinio", escopoTipo: "unidade", empresaId: "e", unidadeId: "un", perfilId: "p", ativo: true, criadoEm: "c" },
   perfil: { id: "p", codigo: "consultor", nome: "Consultor", descricao: null, ativo: true, criadoEm: "c" },
   permissoes: [],
 };

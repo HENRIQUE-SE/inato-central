@@ -23,7 +23,7 @@ import {
 } from "./veiculos.service";
 
 const CONTEXTO: ContextoAcesso = {
-  vinculo: { id: "v", usuarioId: "usuario-1", empresaId: "empresa-contexto", unidadeId: "unidade-contexto", perfilId: "p", ativo: true, criadoEm: "2026-08-08T00:00:00.000Z" },
+  vinculo: { id: "v", usuarioId: "usuario-1", redeId: "rede-matriz", operacaoId: "operacao-matriz", areaOperacionalId: "area-patrocinio", escopoTipo: "unidade", empresaId: "empresa-contexto", unidadeId: "unidade-contexto", perfilId: "p", ativo: true, criadoEm: "2026-08-08T00:00:00.000Z" },
   perfil: { id: "p", codigo: "administrador", nome: "Administrador", descricao: null, ativo: true, criadoEm: "2026-08-08T00:00:00.000Z" },
   permissoes: [],
 };

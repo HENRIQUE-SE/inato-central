@@ -11,7 +11,7 @@ const oportunidade: Oportunidade = { id: "00000000-0000-4000-8000-000000000201",
 const usuario = { id: "00000000-0000-4000-8000-000000000999", email: "usuario@inato.test" };
 let persistidos: RegistroAuditoria[];
 const contextoAcesso: ContextoAcesso = {
-  vinculo: { id: "v", usuarioId: usuario.id, empresaId: "00000000-0000-4000-8000-000000000001", unidadeId: "00000000-0000-4000-8000-000000000002", perfilId: "perfil", ativo: true, criadoEm: "2026-08-07T00:00:00.000Z" },
+  vinculo: { id: "v", usuarioId: usuario.id, redeId: "rede-matriz", operacaoId: "operacao-matriz", areaOperacionalId: "area-patrocinio", escopoTipo: "unidade", empresaId: "00000000-0000-4000-8000-000000000001", unidadeId: "00000000-0000-4000-8000-000000000002", perfilId: "perfil", ativo: true, criadoEm: "2026-08-07T00:00:00.000Z" },
   perfil: { id: "perfil", codigo: CODIGOS_PERFIL_ACESSO.CONSULTOR, nome: "Consultor", descricao: null, ativo: true, criadoEm: "2026-08-07T00:00:00.000Z" },
   permissoes: [{ id: "p", codigo: CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_VISUALIZAR, nome: "Visualizar", descricao: null, criadoEm: "2026-08-07T00:00:00.000Z" }],
 };

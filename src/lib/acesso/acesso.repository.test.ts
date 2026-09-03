@@ -11,7 +11,9 @@ const EMPRESA = "00000000-0000-4000-8000-000000000001";
 
 function linha(alteracoes: Record<string, unknown> = {}) {
   return {
-    id: "vinculo-1", usuario_id: USUARIO, empresa_id: EMPRESA, unidade_id: "unidade-1",
+    id: "vinculo-1", usuario_id: USUARIO,
+    rede_id: "rede-1", operacao_id: "operacao-1", area_operacional_id: "area-1",
+    empresa_id: EMPRESA, unidade_id: "unidade-1", escopo_tipo: "unidade",
     perfil_id: "perfil-1", ativo: true, criado_em: "2026-08-07T00:00:00.000Z",
     perfil: {
       id: "perfil-1", codigo: "administrador", nome: "Administrador", descricao: null,
@@ -36,8 +38,12 @@ async function obter(data: unknown, error: unknown = null) {
 
 test("mapeia retorno relacional válido preservando empresa, unidade, perfil e permissões", async () => {
   const contexto = await obter(linha());
+  assert.equal(contexto?.vinculo.redeId, "rede-1");
+  assert.equal(contexto?.vinculo.operacaoId, "operacao-1");
+  assert.equal(contexto?.vinculo.areaOperacionalId, "area-1");
   assert.equal(contexto?.vinculo.empresaId, EMPRESA);
   assert.equal(contexto?.vinculo.unidadeId, "unidade-1");
+  assert.equal(contexto?.vinculo.escopoTipo, "unidade");
   assert.equal(contexto?.perfil.codigo, "administrador");
   assert.deepEqual(contexto?.permissoes.map(({ codigo }) => codigo), ["auditoria.visualizar", "oportunidades.criar"]);
 });

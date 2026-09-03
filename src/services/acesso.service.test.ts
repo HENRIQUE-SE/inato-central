@@ -4,7 +4,7 @@ import { CODIGOS_PERFIL_ACESSO, CODIGOS_PERMISSAO_ACESSO, type ContextoAcesso } 
 import { exigirPermissao, obterContextoAcessoAtual, obterContextoAcessoAutenticadoAtual, usuarioAtualPossuiPermissao } from "./acesso.service";
 
 const contexto: ContextoAcesso = {
-  vinculo: { id: "v", usuarioId: "usuario-1", empresaId: "empresa", unidadeId: "unidade", perfilId: "perfil", ativo: true, criadoEm: "2026-08-07T00:00:00.000Z" },
+  vinculo: { id: "v", usuarioId: "usuario-1", redeId: "rede", operacaoId: "operacao", areaOperacionalId: "area", empresaId: "empresa", unidadeId: "unidade", escopoTipo: "unidade", perfilId: "perfil", ativo: true, criadoEm: "2026-08-07T00:00:00.000Z" },
   perfil: { id: "perfil", codigo: CODIGOS_PERFIL_ACESSO.ADMINISTRADOR, nome: "Administrador", descricao: null, ativo: true, criadoEm: "2026-08-07T00:00:00.000Z" },
   permissoes: [{ id: "p", codigo: CODIGOS_PERMISSAO_ACESSO.AUDITORIA_VISUALIZAR, nome: "Auditoria", descricao: null, criadoEm: "2026-08-07T00:00:00.000Z" }],
 };

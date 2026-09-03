@@ -1,17 +1,43 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CODIGOS_PERFIL_ACESSO, CODIGOS_PERMISSAO_ACESSO, PERMISSOES_INICIAIS_POR_PERFIL, type CodigoPerfilAcesso } from "./constants";
+import { CODIGOS_ESCOPO_ACESSO, CODIGOS_PERFIL_ACESSO, CODIGOS_PERMISSAO_ACESSO, PERMISSOES_INICIAIS_POR_PERFIL, type CodigoPerfilAcesso } from "./constants";
 import { possuiPermissao } from "./service";
 import type { ContextoAcesso } from "./types";
 
 function contexto(codigo: CodigoPerfilAcesso): ContextoAcesso {
   return {
-    vinculo: { id: "vinculo", usuarioId: "usuario", empresaId: "empresa", unidadeId: "unidade", perfilId: codigo, ativo: true, criadoEm: "2026-08-07T00:00:00.000Z" },
+    vinculo: { id: "vinculo", usuarioId: "usuario", redeId: "rede", operacaoId: "operacao", areaOperacionalId: "area", empresaId: "empresa", unidadeId: "unidade", escopoTipo: CODIGOS_ESCOPO_ACESSO.UNIDADE, perfilId: codigo, ativo: true, criadoEm: "2026-08-07T00:00:00.000Z" },
     perfil: { id: codigo, codigo, nome: codigo, descricao: null, ativo: true, criadoEm: "2026-08-07T00:00:00.000Z" },
     permissoes: PERMISSOES_INICIAIS_POR_PERFIL[codigo].map((permissao) => ({ id: permissao, codigo: permissao, nome: permissao, descricao: null, criadoEm: "2026-08-07T00:00:00.000Z" })),
   };
 }
 
+test("modelo reconhece os seis perfis oficiais da INATO", () => {
+  assert.deepEqual(Object.values(CODIGOS_PERFIL_ACESSO), [
+    "super_admin",
+    "administrador",
+    "gerente",
+    "consultor",
+    "financeiro",
+    "teste",
+  ]);
+});
+
+test("super admin ainda nao recebe permissoes locais por constante", () => {
+  assert.deepEqual(PERMISSOES_INICIAIS_POR_PERFIL.super_admin, []);
+});
+
+test("gerente ainda nao recebe permissoes locais por constante", () => {
+  assert.deepEqual(PERMISSOES_INICIAIS_POR_PERFIL.gerente, []);
+});
+test("modelo reconhece os quatro escopos organizacionais oficiais", () => {
+  assert.deepEqual(Object.values(CODIGOS_ESCOPO_ACESSO), [
+    "rede",
+    "operacao",
+    "area_operacional",
+    "unidade",
+  ]);
+});
 test("administrador possui auditoria.visualizar", () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR), CODIGOS_PERMISSAO_ACESSO.AUDITORIA_VISUALIZAR), true));
 test("consultor não possui auditoria.visualizar", () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.CONSULTOR), CODIGOS_PERMISSAO_ACESSO.AUDITORIA_VISUALIZAR), false));
 test("administrador possui todas as permissões de oportunidades", () => { const atual = contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR); for (const codigo of Object.values(CODIGOS_PERMISSAO_ACESSO).filter((valor) => valor.startsWith("oportunidades."))) assert.equal(possuiPermissao(atual, codigo), true); });

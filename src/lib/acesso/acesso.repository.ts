@@ -1,8 +1,8 @@
 import { supabase } from "@/lib/supabase";
 import { obterContextoOrganizacional } from "@/core/organizacao";
-import type { CodigoPerfilAcesso, CodigoPermissaoAcesso, ContextoAcesso, PerfilAcesso, PermissaoAcesso, VinculoAcesso } from "@/core/acesso";
+import type { CodigoEscopoAcesso, CodigoPerfilAcesso, CodigoPermissaoAcesso, ContextoAcesso, PerfilAcesso, PermissaoAcesso, VinculoAcesso } from "@/core/acesso";
 
-type LinhaVinculo = { id: string; usuario_id: string; empresa_id: string; unidade_id: string | null; perfil_id: string; ativo: boolean; criado_em: string };
+type LinhaVinculo = { id: string; usuario_id: string; rede_id: string; operacao_id: string | null; area_operacional_id: string | null; empresa_id: string; unidade_id: string | null; escopo_tipo: CodigoEscopoAcesso; perfil_id: string; ativo: boolean; criado_em: string };
 type LinhaPerfil = { id: string; codigo: CodigoPerfilAcesso; nome: string; descricao: string | null; ativo: boolean; criado_em: string };
 type LinhaPermissao = { id: string; codigo: CodigoPermissaoAcesso; nome: string; descricao: string | null; criado_em: string };
 type LinhaPerfilPermissao = { permissao_id: string };
@@ -15,8 +15,12 @@ type ConsultarContextoRelacional = (usuarioId: string, empresaId: string) => Pro
 const SELECAO_CONTEXTO_RELACIONAL = `
   id,
   usuario_id,
+  rede_id,
+  operacao_id,
+  area_operacional_id,
   empresa_id,
   unidade_id,
+  escopo_tipo,
   perfil_id,
   ativo,
   criado_em,
@@ -39,7 +43,7 @@ const SELECAO_CONTEXTO_RELACIONAL = `
   )
 `;
 
-function mapearVinculo(linha: LinhaVinculo): VinculoAcesso { return { id: linha.id, usuarioId: linha.usuario_id, empresaId: linha.empresa_id, unidadeId: linha.unidade_id, perfilId: linha.perfil_id, ativo: linha.ativo, criadoEm: linha.criado_em }; }
+function mapearVinculo(linha: LinhaVinculo): VinculoAcesso { return { id: linha.id, usuarioId: linha.usuario_id, redeId: linha.rede_id, operacaoId: linha.operacao_id, areaOperacionalId: linha.area_operacional_id, empresaId: linha.empresa_id, unidadeId: linha.unidade_id, escopoTipo: linha.escopo_tipo, perfilId: linha.perfil_id, ativo: linha.ativo, criadoEm: linha.criado_em }; }
 function mapearPerfil(linha: LinhaPerfil): PerfilAcesso { return { id: linha.id, codigo: linha.codigo, nome: linha.nome, descricao: linha.descricao, ativo: linha.ativo, criadoEm: linha.criado_em }; }
 function mapearPermissao(linha: LinhaPermissao): PermissaoAcesso { return { id: linha.id, codigo: linha.codigo, nome: linha.nome, descricao: linha.descricao, criadoEm: linha.criado_em }; }
 

@@ -36,7 +36,7 @@ function contexto(
   ativo = true
 ): ContextoAcessoAutenticado {
   const acesso: ContextoAcesso = {
-    vinculo: { id: "vinculo", usuarioId: "usuario", empresaId: "empresa-a", unidadeId: "unidade-a", perfilId: "perfil", ativo, criadoEm: "agora" },
+    vinculo: { id: "vinculo", usuarioId: "usuario", redeId: "rede-matriz", operacaoId: "operacao-matriz", areaOperacionalId: "area-patrocinio", escopoTipo: "unidade", empresaId: "empresa-a", unidadeId: "unidade-a", perfilId: "perfil", ativo, criadoEm: "agora" },
     perfil: { id: "perfil", codigo: perfil, nome: perfil, descricao: null, ativo: true, criadoEm: "agora" },
     permissoes: permissoes.map((codigo) => ({ id: codigo, codigo, nome: codigo, descricao: null, criadoEm: "agora" })),
   };
