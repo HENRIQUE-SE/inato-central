@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CODIGOS_PERFIL_ACESSO, CODIGOS_PERMISSAO_ACESSO, type ContextoAcesso } from "@/core/acesso";
-import { exigirPermissao, obterContextoAcessoAtual, obterContextoAcessoAutenticadoAtual, obterContextoOperacionalAtivoAtual, usuarioAtualPossuiPermissao } from "./acesso.service";
+import { contextoOperacionalSolicitadoEhPermitido, exigirPermissao, obterContextoAcessoAtual, obterContextoAcessoAutenticadoAtual, obterContextoOperacionalAtivoAtual, obterUnidadesOperacionaisPermitidasAtuais, usuarioAtualPossuiPermissao } from "./acesso.service";
 
 const contexto: ContextoAcesso = {
   vinculo: { id: "v", usuarioId: "usuario-1", redeId: "rede", operacaoId: "operacao", areaOperacionalId: "area", empresaId: "empresa", unidadeId: "unidade", escopoTipo: "unidade", perfilId: "perfil", ativo: true, criadoEm: "2026-08-07T00:00:00.000Z" },
@@ -32,6 +32,31 @@ test("usuário atual de escopo unidade obtém contexto operacional compatível",
     empresaId: "empresa",
     unidadeId: "unidade",
   });
+});
+const unidadePermitida = {
+  redeId: "rede", operacaoId: "operacao", areaOperacionalId: "area", empresaId: "empresa", unidadeId: "unidade",
+  codigo: "loja", numero: 1, nome: "Unidade", nomeExibicao: "Unidade", cidade: "Cidade", uf: "MG",
+};
+test("autoridade autenticada lista Unidades permitidas sem selecionar contexto", async () => {
+  assert.deepEqual(await obterUnidadesOperacionaisPermitidasAtuais(dependencias, async (vinculo) => {
+    assert.equal(vinculo, contexto.vinculo);
+    return [unidadePermitida];
+  }), [unidadePermitida]);
+});
+test("contexto coerente com Unidade persistida é permitido", async () => {
+  assert.equal(await contextoOperacionalSolicitadoEhPermitido({ redeId: "rede", operacaoId: "operacao", areaOperacionalId: "area", empresaId: "empresa", unidadeId: "unidade" }, dependencias, async () => [unidadePermitida]), true);
+});
+test("contexto forjado é rejeitado mesmo com unidadeId correto", async () => {
+  for (const campo of ["redeId", "operacaoId", "areaOperacionalId", "empresaId"] as const) {
+    const solicitado = { redeId: "rede", operacaoId: "operacao", areaOperacionalId: "area", empresaId: "empresa", unidadeId: "unidade", [campo]: "forjado" };
+    assert.equal(await contextoOperacionalSolicitadoEhPermitido(solicitado, dependencias, async () => [unidadePermitida]), false);
+  }
+});
+test("escopo superior lista opções sem criar contexto ativo automaticamente", async () => {
+  const superior = { ...contexto, vinculo: { ...contexto.vinculo, escopoTipo: "rede" as const, operacaoId: null, areaOperacionalId: null, empresaId: null, unidadeId: null } };
+  const depsSuperior = { ...dependencias, obterContextoPersistido: async () => superior };
+  assert.equal(await obterContextoOperacionalAtivoAtual(depsSuperior), null);
+  assert.deepEqual(await obterUnidadesOperacionaisPermitidasAtuais(depsSuperior, async () => [unidadePermitida]), [unidadePermitida]);
 });
 test("usuário e contexto são resolvidos juntos com uma única autenticação", async () => {
   let autenticacoes = 0;

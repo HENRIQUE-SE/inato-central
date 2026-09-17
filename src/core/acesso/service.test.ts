@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CODIGOS_ESCOPO_ACESSO, CODIGOS_PERFIL_ACESSO, CODIGOS_PERMISSAO_ACESSO, PERMISSOES_INICIAIS_POR_PERFIL, type CodigoPerfilAcesso } from "./constants";
-import { derivarContextoOperacionalAtivo, possuiPermissao } from "./service";
+import { contextoOperacionalCorrespondeAUnidade, derivarContextoOperacionalAtivo, possuiPermissao, unidadePertenceAoTerritorio, vinculoPossuiTerritorioValido } from "./service";
 import type { ContextoAcesso } from "./types";
 
 function contexto(codigo: CodigoPerfilAcesso): ContextoAcesso {
@@ -64,6 +64,31 @@ for (const escopoTipo of [CODIGOS_ESCOPO_ACESSO.REDE, CODIGOS_ESCOPO_ACESSO.OPER
     assert.equal(derivarContextoOperacionalAtivo({ ...contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR).vinculo, escopoTipo }), null);
   });
 }
+const unidadePermitida = {
+  redeId: "rede", operacaoId: "operacao", areaOperacionalId: "area", empresaId: "empresa", unidadeId: "unidade",
+  codigo: "loja", numero: 1, nome: "Unidade", nomeExibicao: "Unidade", cidade: "Cidade", uf: "MG",
+};
+test("território de Unidade exige estrutura completa", () => {
+  const vinculo = contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR).vinculo;
+  assert.equal(vinculoPossuiTerritorioValido(vinculo), true);
+  assert.equal(vinculoPossuiTerritorioValido({ ...vinculo, empresaId: null }), false);
+});
+test("Unidade permitida respeita todos os níveis do vínculo", () => {
+  const vinculo = contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR).vinculo;
+  assert.equal(unidadePertenceAoTerritorio(vinculo, unidadePermitida), true);
+  assert.equal(unidadePertenceAoTerritorio(vinculo, { ...unidadePermitida, redeId: "outra" }), false);
+  assert.equal(unidadePertenceAoTerritorio(vinculo, { ...unidadePermitida, operacaoId: "outra" }), false);
+  assert.equal(unidadePertenceAoTerritorio(vinculo, { ...unidadePermitida, areaOperacionalId: "outra" }), false);
+  assert.equal(unidadePertenceAoTerritorio(vinculo, { ...unidadePermitida, empresaId: "outra" }), false);
+  assert.equal(unidadePertenceAoTerritorio(vinculo, { ...unidadePermitida, unidadeId: "outra" }), false);
+});
+test("contexto solicitado exige correspondência integral com a hierarquia persistida", () => {
+  const contextoValido = { redeId: "rede", operacaoId: "operacao", areaOperacionalId: "area", empresaId: "empresa", unidadeId: "unidade" };
+  assert.equal(contextoOperacionalCorrespondeAUnidade(contextoValido, unidadePermitida), true);
+  for (const campo of ["redeId", "operacaoId", "areaOperacionalId", "empresaId", "unidadeId"] as const) {
+    assert.equal(contextoOperacionalCorrespondeAUnidade({ ...contextoValido, [campo]: "forjado" }, unidadePermitida), false);
+  }
+});
 test("administrador possui auditoria.visualizar", () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR), CODIGOS_PERMISSAO_ACESSO.AUDITORIA_VISUALIZAR), true));
 test("consultor não possui auditoria.visualizar", () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.CONSULTOR), CODIGOS_PERMISSAO_ACESSO.AUDITORIA_VISUALIZAR), false));
 test("administrador possui todas as permissões de oportunidades", () => { const atual = contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR); for (const codigo of Object.values(CODIGOS_PERMISSAO_ACESSO).filter((valor) => valor.startsWith("oportunidades."))) assert.equal(possuiPermissao(atual, codigo), true); });

@@ -1,5 +1,5 @@
-import { derivarContextoOperacionalAtivo, possuiPermissao, type CodigoPermissaoAcesso, type ContextoAcesso } from "@/core/acesso";
-import type { ContextoOperacionalAtivo } from "@/core/organizacao";
+import { contextoOperacionalCorrespondeAUnidade, derivarContextoOperacionalAtivo, possuiPermissao, type CodigoPermissaoAcesso, type ContextoAcesso } from "@/core/acesso";
+import type { ContextoOperacionalAtivo, UnidadeOperacionalPermitida } from "@/core/organizacao";
 import { obterUsuarioAtualAutenticado, type UsuarioAutenticado } from "./auth.service";
 
 type DependenciasAcesso = {
@@ -50,6 +50,28 @@ export async function obterContextoOperacionalAtivoAtual(
 ): Promise<ContextoOperacionalAtivo | null> {
   const contexto = await obterContextoAcessoAtual(dependencias);
   return contexto === null ? null : derivarContextoOperacionalAtivo(contexto.vinculo);
+}
+
+async function listarUnidadesPersistidas(vinculo: ContextoAcesso["vinculo"]): Promise<UnidadeOperacionalPermitida[]> {
+  const { listarUnidadesOperacionaisPermitidas } = await import("@/lib/organizacao/organizacao.repository");
+  return listarUnidadesOperacionaisPermitidas(vinculo);
+}
+
+export async function obterUnidadesOperacionaisPermitidasAtuais(
+  dependencias: DependenciasAcesso = DEPENDENCIAS_PADRAO,
+  listar: (vinculo: ContextoAcesso["vinculo"]) => Promise<UnidadeOperacionalPermitida[]> = listarUnidadesPersistidas
+): Promise<UnidadeOperacionalPermitida[]> {
+  const contexto = await obterContextoAcessoAtual(dependencias);
+  return contexto === null ? [] : listar(contexto.vinculo);
+}
+
+export async function contextoOperacionalSolicitadoEhPermitido(
+  contextoSolicitado: ContextoOperacionalAtivo,
+  dependencias: DependenciasAcesso = DEPENDENCIAS_PADRAO,
+  listar: (vinculo: ContextoAcesso["vinculo"]) => Promise<UnidadeOperacionalPermitida[]> = listarUnidadesPersistidas
+): Promise<boolean> {
+  const unidades = await obterUnidadesOperacionaisPermitidasAtuais(dependencias, listar);
+  return unidades.some((unidade) => contextoOperacionalCorrespondeAUnidade(contextoSolicitado, unidade));
 }
 
 export async function usuarioAtualPossuiPermissao(codigo: CodigoPermissaoAcesso, dependencias: DependenciasAcesso = DEPENDENCIAS_PADRAO): Promise<boolean> {

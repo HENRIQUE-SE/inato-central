@@ -11,6 +11,7 @@ export type {
   ContextoOperacionalAtivo,
   Empresa,
   Unidade,
+  UnidadeOperacionalPermitida,
 } from "./types";
 export {
   obterContextoOrganizacional,

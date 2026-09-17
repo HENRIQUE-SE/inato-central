@@ -48,3 +48,12 @@ export type ContextoOperacionalAtivo = {
   readonly empresaId: string;
   readonly unidadeId: string;
 };
+
+export type UnidadeOperacionalPermitida = ContextoOperacionalAtivo & {
+  readonly codigo: string;
+  readonly numero: number;
+  readonly nome: string;
+  readonly nomeExibicao: string;
+  readonly cidade: string;
+  readonly uf: string;
+};
