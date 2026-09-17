@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CODIGOS_PERFIL_ACESSO, CODIGOS_PERMISSAO_ACESSO, type ContextoAcesso } from "@/core/acesso";
-import { exigirPermissao, obterContextoAcessoAtual, obterContextoAcessoAutenticadoAtual, usuarioAtualPossuiPermissao } from "./acesso.service";
+import { exigirPermissao, obterContextoAcessoAtual, obterContextoAcessoAutenticadoAtual, obterContextoOperacionalAtivoAtual, usuarioAtualPossuiPermissao } from "./acesso.service";
 
 const contexto: ContextoAcesso = {
   vinculo: { id: "v", usuarioId: "usuario-1", redeId: "rede", operacaoId: "operacao", areaOperacionalId: "area", empresaId: "empresa", unidadeId: "unidade", escopoTipo: "unidade", perfilId: "perfil", ativo: true, criadoEm: "2026-08-07T00:00:00.000Z" },
@@ -24,6 +24,15 @@ const contextoConsultor: ContextoAcesso = {
 const dependenciasConsultor = { ...dependencias, obterContextoPersistido: async () => contextoConsultor };
 
 test("usuário autenticado obtém vínculo, perfil e permissões", async () => { const atual = await obterContextoAcessoAtual(dependencias); assert.equal(atual?.vinculo.id, "v"); assert.equal(atual?.perfil.codigo, "administrador"); assert.deepEqual(atual?.permissoes.map(({ codigo }) => codigo), ["auditoria.visualizar"]); });
+test("usuário atual de escopo unidade obtém contexto operacional compatível", async () => {
+  assert.deepEqual(await obterContextoOperacionalAtivoAtual(dependencias), {
+    redeId: "rede",
+    operacaoId: "operacao",
+    areaOperacionalId: "area",
+    empresaId: "empresa",
+    unidadeId: "unidade",
+  });
+});
 test("usuário e contexto são resolvidos juntos com uma única autenticação", async () => {
   let autenticacoes = 0;
   const atual = await obterContextoAcessoAutenticadoAtual({

@@ -1,4 +1,5 @@
-import { possuiPermissao, type CodigoPermissaoAcesso, type ContextoAcesso } from "@/core/acesso";
+import { derivarContextoOperacionalAtivo, possuiPermissao, type CodigoPermissaoAcesso, type ContextoAcesso } from "@/core/acesso";
+import type { ContextoOperacionalAtivo } from "@/core/organizacao";
 import { obterUsuarioAtualAutenticado, type UsuarioAutenticado } from "./auth.service";
 
 type DependenciasAcesso = {
@@ -42,6 +43,13 @@ export function obterContextoAcessoAutenticadoAtual(dependencias: DependenciasAc
 
 export async function obterContextoAcessoAtual(dependencias: DependenciasAcesso = DEPENDENCIAS_PADRAO): Promise<ContextoAcesso | null> {
   return (await obterContextoAcessoAutenticadoAtual(dependencias))?.contexto ?? null;
+}
+
+export async function obterContextoOperacionalAtivoAtual(
+  dependencias: DependenciasAcesso = DEPENDENCIAS_PADRAO
+): Promise<ContextoOperacionalAtivo | null> {
+  const contexto = await obterContextoAcessoAtual(dependencias);
+  return contexto === null ? null : derivarContextoOperacionalAtivo(contexto.vinculo);
 }
 
 export async function usuarioAtualPossuiPermissao(codigo: CodigoPermissaoAcesso, dependencias: DependenciasAcesso = DEPENDENCIAS_PADRAO): Promise<boolean> {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CODIGOS_ESCOPO_ACESSO, CODIGOS_PERFIL_ACESSO, CODIGOS_PERMISSAO_ACESSO, PERMISSOES_INICIAIS_POR_PERFIL, type CodigoPerfilAcesso } from "./constants";
-import { possuiPermissao } from "./service";
+import { derivarContextoOperacionalAtivo, possuiPermissao } from "./service";
 import type { ContextoAcesso } from "./types";
 
 function contexto(codigo: CodigoPerfilAcesso): ContextoAcesso {
@@ -38,6 +38,32 @@ test("modelo reconhece os quatro escopos organizacionais oficiais", () => {
     "unidade",
   ]);
 });
+test("vínculo ativo de unidade completo deriva o contexto operacional", () => {
+  assert.deepEqual(derivarContextoOperacionalAtivo(contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR).vinculo), {
+    redeId: "rede",
+    operacaoId: "operacao",
+    areaOperacionalId: "area",
+    empresaId: "empresa",
+    unidadeId: "unidade",
+  });
+});
+test("vínculo de unidade sem unidade não deriva contexto operacional", () => {
+  assert.equal(derivarContextoOperacionalAtivo({ ...contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR).vinculo, unidadeId: null }), null);
+});
+test("vínculo de unidade sem operação não deriva contexto operacional", () => {
+  assert.equal(derivarContextoOperacionalAtivo({ ...contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR).vinculo, operacaoId: null }), null);
+});
+test("vínculo de unidade sem área operacional não deriva contexto operacional", () => {
+  assert.equal(derivarContextoOperacionalAtivo({ ...contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR).vinculo, areaOperacionalId: null }), null);
+});
+test("vínculo inativo não deriva contexto operacional", () => {
+  assert.equal(derivarContextoOperacionalAtivo({ ...contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR).vinculo, ativo: false }), null);
+});
+for (const escopoTipo of [CODIGOS_ESCOPO_ACESSO.REDE, CODIGOS_ESCOPO_ACESSO.OPERACAO, CODIGOS_ESCOPO_ACESSO.AREA_OPERACIONAL]) {
+  test(`vínculo de escopo ${escopoTipo} não escolhe unidade automaticamente`, () => {
+    assert.equal(derivarContextoOperacionalAtivo({ ...contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR).vinculo, escopoTipo }), null);
+  });
+}
 test("administrador possui auditoria.visualizar", () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR), CODIGOS_PERMISSAO_ACESSO.AUDITORIA_VISUALIZAR), true));
 test("consultor não possui auditoria.visualizar", () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.CONSULTOR), CODIGOS_PERMISSAO_ACESSO.AUDITORIA_VISUALIZAR), false));
 test("administrador possui todas as permissões de oportunidades", () => { const atual = contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR); for (const codigo of Object.values(CODIGOS_PERMISSAO_ACESSO).filter((valor) => valor.startsWith("oportunidades."))) assert.equal(possuiPermissao(atual, codigo), true); });

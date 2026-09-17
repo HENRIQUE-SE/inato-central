@@ -1,4 +1,5 @@
 import { ACOES_AUDITORIA, ORIGENS_AUDITORIA, RESULTADOS_AUDITORIA, registrarEventoAuditoria } from "@/core/auditoria";
+import { derivarContextoOperacionalAtivo } from "@/core/acesso";
 import { obterContextoIdentidadeAtual } from "@/core/identidade";
 import { obterContextoAcessoAutenticadoAtual, type ContextoAcessoAutenticado } from "./acesso.service";
 import type { AcaoAuditoria, RegistroAuditoria, ValorAuditoria } from "@/core/auditoria";
@@ -30,12 +31,18 @@ async function registrar(
   const contextoAutenticado = contextoRecebido ?? await dependencias.obterContextoAutenticado();
   const usuario = contextoAutenticado?.usuario ?? null;
   const contextoAcesso = contextoAutenticado?.contexto ?? null;
+  const contextoOperacional = contextoAcesso === null
+    ? null
+    : derivarContextoOperacionalAtivo(contextoAcesso.vinculo);
+  if (contextoAcesso !== null && contextoOperacional === null) {
+    throw new Error("Não foi possível registrar a auditoria da oportunidade.");
+  }
   const perfilCodigo = usuario === null
     ? contexto.perfil.codigo
     : contextoAcesso?.perfil.codigo;
   const evento = registrarEventoAuditoria({
-    empresaId: contextoAcesso?.vinculo.empresaId ?? contexto.organizacao.empresaId,
-    unidadeId: contextoAcesso?.vinculo.unidadeId ?? contexto.organizacao.unidadeId,
+    empresaId: contextoOperacional?.empresaId ?? contexto.organizacao.empresaId,
+    unidadeId: contextoOperacional?.unidadeId ?? contexto.organizacao.unidadeId,
     usuarioId: null,
     modulo: "oportunidades",
     acao,

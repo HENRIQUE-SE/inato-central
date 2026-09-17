@@ -40,3 +40,11 @@ export type ContextoOrganizacional = {
   empresaId: string;
   unidadeId: string | null;
 };
+
+export type ContextoOperacionalAtivo = {
+  readonly redeId: string;
+  readonly operacaoId: string;
+  readonly areaOperacionalId: string;
+  readonly empresaId: string;
+  readonly unidadeId: string;
+};

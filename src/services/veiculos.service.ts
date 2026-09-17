@@ -14,6 +14,7 @@ import {
 import type { OportunidadeDisponivelParaVeiculo } from "@/core/veiculos/types";
 import {
   CODIGOS_PERMISSAO_ACESSO,
+  derivarContextoOperacionalAtivo,
   possuiPermissao,
   type ContextoAcesso,
 } from "@/core/acesso";
@@ -236,9 +237,11 @@ function normalizarDados(
   dados: DadosFormularioVeiculo,
   contexto: ContextoAcesso
 ): DadosCriacaoVeiculo {
+  const contextoOperacional = derivarContextoOperacionalAtivo(contexto.vinculo);
+  if (contextoOperacional === null) throw new Error("Acesso não autorizado.");
   return {
-    empresaId: contexto.vinculo.empresaId,
-    unidadeId: contexto.vinculo.unidadeId ?? "",
+    empresaId: contextoOperacional.empresaId,
+    unidadeId: contextoOperacional.unidadeId,
     oportunidadeId: dados.oportunidadeId.trim(),
     ...normalizarCamposEditaveis(dados),
   };
@@ -526,7 +529,6 @@ export async function criarVeiculo(
   const deps = dependencias(complemento);
   if (await deps.obterUsuario() === null) throw new Error("Acesso não autorizado.");
   const contexto = await deps.exigirCriacao();
-  if (contexto.vinculo.unidadeId === null) throw new Error("Acesso não autorizado.");
   const dados = normalizarDados(dadosFormulario, contexto);
   const validacao = validarDadosCriacaoVeiculo(dados);
   if (!validacao.valido) throw new Error(validacao.mensagem);

@@ -1,4 +1,4 @@
-import { possuiPermissao, CODIGOS_PERMISSAO_ACESSO } from "@/core/acesso";
+import { derivarContextoOperacionalAtivo, possuiPermissao, CODIGOS_PERMISSAO_ACESSO } from "@/core/acesso";
 import type { CodigoPermissaoAcesso } from "@/core/acesso";
 import type {
   ConsultaOportunidades,
@@ -110,12 +110,12 @@ export async function criarOportunidade(
   dependencias: Dependencias = DEPENDENCIAS_PADRAO
 ): Promise<Oportunidade> {
   const contexto = await exigirContexto(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_CRIAR, dependencias);
-  const unidadeId = contexto.contexto.vinculo.unidadeId;
-  if (unidadeId === null) throw new Error("Acesso não autorizado.");
+  const contextoOperacional = derivarContextoOperacionalAtivo(contexto.contexto.vinculo);
+  if (contextoOperacional === null) throw new Error("Acesso não autorizado.");
   const oportunidade = await dependencias.criar({
     ...dados,
-    empresa_id: contexto.contexto.vinculo.empresaId,
-    unidade_id: unidadeId,
+    empresa_id: contextoOperacional.empresaId,
+    unidade_id: contextoOperacional.unidadeId,
   });
   await dependencias.auditarCriacao(oportunidade, contexto);
   return oportunidade;

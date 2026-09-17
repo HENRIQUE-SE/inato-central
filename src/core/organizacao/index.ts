@@ -8,6 +8,7 @@ export type {
 } from "./constants";
 export type {
   ContextoOrganizacional,
+  ContextoOperacionalAtivo,
   Empresa,
   Unidade,
 } from "./types";

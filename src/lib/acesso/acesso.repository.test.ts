@@ -29,9 +29,8 @@ function linha(alteracoes: Record<string, unknown> = {}) {
 
 async function obter(data: unknown, error: unknown = null) {
   const { obterContextoPersistidoDoUsuario } = await import("./acesso.repository");
-  return obterContextoPersistidoDoUsuario(USUARIO, async (usuarioId, empresaId) => {
+  return obterContextoPersistidoDoUsuario(USUARIO, async (usuarioId) => {
     assert.equal(usuarioId, USUARIO);
-    assert.equal(empresaId, EMPRESA);
     return { data: data as never, error };
   });
 }
@@ -51,7 +50,19 @@ test("mapeia retorno relacional válido preservando empresa, unidade, perfil e p
 test("vínculo inexistente retorna ausência", async () => assert.equal(await obter(null), null));
 test("vínculo inativo é negado", async () => assert.equal(await obter(linha({ ativo: false })), null));
 test("vínculo de outro usuário é negado", async () => assert.equal(await obter(linha({ usuario_id: "outro" })), null));
-test("vínculo de outra empresa é negado", async () => assert.equal(await obter(linha({ empresa_id: "outra" })), null));
+test("vínculo de outra empresa pode representar autoridade organizacional", async () => assert.equal((await obter(linha({ empresa_id: "outra" })))?.vinculo.empresaId, "outra"));
+test("vínculo de rede representa empresa ausente sem inventar contexto", async () => {
+  const contexto = await obter(linha({
+    empresa_id: null,
+    unidade_id: null,
+    operacao_id: null,
+    area_operacional_id: null,
+    escopo_tipo: "rede",
+  }));
+  assert.equal(contexto?.vinculo.empresaId, null);
+  assert.equal(contexto?.vinculo.unidadeId, null);
+  assert.equal(contexto?.vinculo.escopoTipo, "rede");
+});
 test("perfil inexistente é negado", async () => assert.equal(await obter(linha({ perfil: null })), null));
 test("perfil inativo é negado", async () => assert.equal(await obter(linha({ perfil: { ...linha().perfil, ativo: false } })), null));
 test("perfil inconsistente com o vínculo é negado", async () => assert.equal(await obter(linha({ perfil: { ...linha().perfil, id: "outro-perfil" } })), null));
@@ -64,6 +75,15 @@ test("permissão ausente em retorno parcialmente vazio é negada", async () => a
 test("erro por múltiplos vínculos é propagado sem escolher um registro", async () => {
   const erro = new Error("mais de um vínculo");
   await assert.rejects(obter(null, erro), erro);
+});
+
+test("repository localiza autoridade pelo usuário ativo sem depender da empresa estática", () => {
+  const repository = readFileSync(resolve(process.cwd(), "src/lib/acesso/acesso.repository.ts"), "utf8");
+  assert.doesNotMatch(repository, /obterContextoOrganizacional/);
+  assert.doesNotMatch(repository, /\.eq\("empresa_id"/);
+  assert.match(repository, /\.eq\("usuario_id", usuarioId\)/);
+  assert.match(repository, /\.eq\("ativo", true\)/);
+  assert.match(repository, /\.maybeSingle\(\)/);
 });
 
 test("consulta usa os três relacionamentos comprovados pela migration", () => {
