@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import { CODIGOS_ESCOPO_ACESSO, type VinculoAcesso } from "@/core/acesso";
-import type { ConsultarUnidadesOperacionais } from "./organizacao.repository";
+import type { ConsultarUnidadeOperacional, ConsultarUnidadesOperacionais } from "./organizacao.repository";
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = "http://127.0.0.1";
 process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "teste-local-sem-credencial";
@@ -34,6 +34,10 @@ const consultar = async () => ({ data: unidades, error: null });
 async function listar(vinculo: VinculoAcesso, consulta: ConsultarUnidadesOperacionais = consultar) {
   const { listarUnidadesOperacionaisPermitidas } = await import("./organizacao.repository");
   return listarUnidadesOperacionaisPermitidas(vinculo, consulta);
+}
+async function obter(vinculo: VinculoAcesso, unidadeId: string, consulta: ConsultarUnidadeOperacional) {
+  const { obterUnidadeOperacionalPermitida } = await import("./organizacao.repository");
+  return obterUnidadeOperacionalPermitida(vinculo, unidadeId, consulta);
 }
 
 test("escopo Unidade retorna somente sua Unidade", async () => {
@@ -77,6 +81,69 @@ test("Operação sem empresa_id falha fechado", async () => {
   const semEmpresa = [linha("unidade-1", "rede-1", "operacao-1", null, "area-1", 1)];
   assert.deepEqual(await listar(vinculoBase, async () => ({ data: semEmpresa, error: null })), []);
 });
+test("Unidade inativa falha fechado", async () => {
+  const inativa = [{ ...linha("unidade-1", "rede-1", "operacao-1", "empresa-1", "area-1", 1), ativo: false }];
+  assert.deepEqual(await listar(vinculoBase, async () => ({ data: inativa, error: null })), []);
+});
+for (const escopo of [CODIGOS_ESCOPO_ACESSO.REDE, CODIGOS_ESCOPO_ACESSO.OPERACAO, CODIGOS_ESCOPO_ACESSO.AREA_OPERACIONAL, CODIGOS_ESCOPO_ACESSO.UNIDADE] as const) {
+  test(`consulta específica recebe vínculo de escopo ${escopo} e ID exato`, async () => {
+    const vinculo = {
+      ...vinculoBase,
+      escopoTipo: escopo,
+      operacaoId: escopo === CODIGOS_ESCOPO_ACESSO.REDE ? null : "operacao-1",
+      areaOperacionalId: escopo === CODIGOS_ESCOPO_ACESSO.REDE || escopo === CODIGOS_ESCOPO_ACESSO.OPERACAO ? null : "area-1",
+      empresaId: escopo === CODIGOS_ESCOPO_ACESSO.UNIDADE ? "empresa-1" : null,
+      unidadeId: escopo === CODIGOS_ESCOPO_ACESSO.UNIDADE ? "unidade-1" : null,
+    };
+    const unidade = await obter(vinculo, "unidade-1", async (recebido, unidadeId) => {
+      assert.equal(recebido, vinculo);
+      assert.equal(unidadeId, "unidade-1");
+      return { data: linha("unidade-1", "rede-1", "operacao-1", "empresa-1", "area-1", 1), error: null };
+    });
+    assert.equal(unidade?.unidadeId, "unidade-1");
+  });
+}
+test("consulta específica retorna null sem linha", async () => {
+  assert.equal(await obter(vinculoBase, "unidade-1", async () => ({ data: null, error: null })), null);
+});
+test("consulta específica rejeita Unidade fora do território pela defesa do Core", async () => {
+  const externa = linha("unidade-1", "rede-2", "operacao-2", "empresa-2", "area-2", 1);
+  assert.equal(await obter(vinculoBase, "unidade-1", async () => ({ data: externa, error: null })), null);
+});
+test("consulta específica rejeita Unidade inativa", async () => {
+  const inativa = { ...linha("unidade-1", "rede-1", "operacao-1", "empresa-1", "area-1", 1), ativo: false };
+  assert.equal(await obter(vinculoBase, "unidade-1", async () => ({ data: inativa, error: null })), null);
+});
+test("consulta específica rejeita Área inativa", async () => {
+  const atual = linha("unidade-1", "rede-1", "operacao-1", "empresa-1", "area-1", 1);
+  const inativa = { ...atual, area_operacional: { ...atual.area_operacional, ativo: false } };
+  assert.equal(await obter(vinculoBase, "unidade-1", async () => ({ data: inativa, error: null })), null);
+});
+test("consulta específica rejeita Operação inativa", async () => {
+  const atual = linha("unidade-1", "rede-1", "operacao-1", "empresa-1", "area-1", 1);
+  const inativa = { ...atual, area_operacional: { ...atual.area_operacional, operacao: { ...atual.area_operacional.operacao, ativo: false } } };
+  assert.equal(await obter(vinculoBase, "unidade-1", async () => ({ data: inativa, error: null })), null);
+});
+test("consulta específica rejeita Operação sem empresa_id", async () => {
+  assert.equal(await obter(vinculoBase, "unidade-1", async () => ({ data: linha("unidade-1", "rede-1", "operacao-1", null, "area-1", 1), error: null })), null);
+});
+test("consulta específica preserva empresaId persistido diferente de operacaoId", async () => {
+  const unidade = await obter(vinculoBase, "unidade-1", async () => ({ data: linha("unidade-1", "rede-1", "operacao-1", "empresa-1", "area-1", 1), error: null }));
+  assert.equal(unidade?.empresaId, "empresa-1");
+  assert.notEqual(unidade?.empresaId, unidade?.operacaoId);
+});
+test("consulta específica propaga erro persistente", async () => {
+  const erro = new Error("falha específica");
+  await assert.rejects(obter(vinculoBase, "unidade-1", async () => ({ data: null, error: erro })), erro);
+});
+test("consulta específica falha fechado para vínculo territorial inválido sem consultar", async () => {
+  let consultas = 0;
+  assert.equal(await obter({ ...vinculoBase, operacaoId: null }, "unidade-1", async () => {
+    consultas += 1;
+    return { data: linha("unidade-1", "rede-1", "operacao-1", "empresa-1", "area-1", 1), error: null };
+  }), null);
+  assert.equal(consultas, 0);
+});
 test("contexto que usa operacaoId como empresaId é rejeitado e empresa persistida é aceita", async () => {
   const [unidade] = await listar(vinculoBase);
   const { contextoOperacionalCorrespondeAUnidade } = await import("@/core/acesso");
@@ -92,6 +159,9 @@ test("repository usa hierarquia persistida, filtros territoriais e não usa cat�
   assert.match(fonte, /empresaId: operacao\.empresa_id/);
   assert.doesNotMatch(fonte, /empresaId: operacao\.id/);
   assert.match(fonte, /area_operacional\.operacao\.rede_id/);
+  assert.match(fonte, /\.eq\("id", unidadeId\)/);
+  assert.match(fonte, /\.maybeSingle\(\)/);
+  assert.match(fonte, /unidadePertenceAoTerritorio\(vinculo, unidade\)/);
   assert.doesNotMatch(fonte, /obterContextoOrganizacional|Patrocínio|MATRIZ|Loja 1|00000000-/);
 });
 test("migration explicita Empresa da Operação sem impor igualdade de IDs", () => {

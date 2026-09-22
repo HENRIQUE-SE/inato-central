@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CODIGOS_PERFIL_ACESSO, CODIGOS_PERMISSAO_ACESSO, type ContextoAcesso } from "@/core/acesso";
-import { contextoOperacionalSolicitadoEhPermitido, exigirPermissao, obterContextoAcessoAtual, obterContextoAcessoAutenticadoAtual, obterContextoOperacionalAtivoAtual, obterUnidadesOperacionaisPermitidasAtuais, usuarioAtualPossuiPermissao } from "./acesso.service";
+import { contextoOperacionalSolicitadoEhPermitido, exigirPermissao, obterContextoAcessoAtual, obterContextoAcessoAutenticadoAtual, obterContextoOperacionalAtivoAtual, obterUnidadesOperacionaisPermitidasAtuais, resolverContextoOperacionalAtivoAtual, usuarioAtualPossuiPermissao } from "./acesso.service";
+import type { SelecaoContextoOperacional } from "@/core/organizacao";
 
 const contexto: ContextoAcesso = {
   vinculo: { id: "v", usuarioId: "usuario-1", redeId: "rede", operacaoId: "operacao", areaOperacionalId: "area", empresaId: "empresa", unidadeId: "unidade", escopoTipo: "unidade", perfilId: "perfil", ativo: true, criadoEm: "2026-08-07T00:00:00.000Z" },
@@ -57,6 +58,79 @@ test("escopo superior lista opções sem criar contexto ativo automaticamente", 
   const depsSuperior = { ...dependencias, obterContextoPersistido: async () => superior };
   assert.equal(await obterContextoOperacionalAtivoAtual(depsSuperior), null);
   assert.deepEqual(await obterUnidadesOperacionaisPermitidasAtuais(depsSuperior, async () => [unidadePermitida]), [unidadePermitida]);
+});
+function dependenciasDeEscopo(escopoTipo: "rede" | "operacao" | "area_operacional") {
+  const vinculo = {
+    ...contexto.vinculo,
+    redeId: "rede-real",
+    escopoTipo,
+    operacaoId: escopoTipo === "rede" ? null : "operacao-real",
+    areaOperacionalId: escopoTipo === "area_operacional" ? "area-real" : null,
+    empresaId: null,
+    unidadeId: null,
+  };
+  return { ...dependencias, obterContextoPersistido: async () => ({ ...contexto, vinculo }) };
+}
+const unidadeReal = {
+  redeId: "rede-real", operacaoId: "operacao-real", areaOperacionalId: "area-real", empresaId: "empresa-real", unidadeId: "unidade-1",
+  codigo: "unidade-1", numero: 1, nome: "Unidade real", nomeExibicao: "Unidade real", cidade: "Cidade", uf: "MG",
+};
+test("escopo Unidade válido resolve automaticamente sem consultar seleção", async () => {
+  let consultas = 0;
+  assert.deepEqual(await resolverContextoOperacionalAtivoAtual(undefined, dependencias, async () => { consultas += 1; return null; }), {
+    redeId: "rede", operacaoId: "operacao", areaOperacionalId: "area", empresaId: "empresa", unidadeId: "unidade",
+  });
+  assert.equal(consultas, 0);
+});
+test("escopo Unidade não pode trocar de Unidade por seleção externa", async () => {
+  await assert.rejects(resolverContextoOperacionalAtivoAtual({ unidadeId: "outra" }, dependencias, async () => unidadeReal), new Error("Seleção de contexto não autorizada."));
+});
+for (const escopo of ["area_operacional", "operacao", "rede"] as const) {
+  test(`escopo ${escopo} sem seleção não produz contexto nem escolhe lista ordenada`, async () => {
+    let consultas = 0;
+    assert.equal(await resolverContextoOperacionalAtivoAtual(undefined, dependenciasDeEscopo(escopo), async () => { consultas += 1; return unidadeReal; }), null);
+    assert.equal(consultas, 0);
+  });
+  test(`escopo ${escopo} com Unidade autorizada produz contexto persistido`, async () => {
+    assert.deepEqual(await resolverContextoOperacionalAtivoAtual({ unidadeId: "unidade-1" }, dependenciasDeEscopo(escopo), async (vinculo, unidadeId) => {
+      assert.equal(vinculo.escopoTipo, escopo);
+      assert.equal(unidadeId, "unidade-1");
+      return unidadeReal;
+    }), {
+      redeId: "rede-real", operacaoId: "operacao-real", areaOperacionalId: "area-real", empresaId: "empresa-real", unidadeId: "unidade-1",
+    });
+  });
+  test(`escopo ${escopo} não revela Unidade ausente ou fora da autoridade`, async () => {
+    await assert.rejects(resolverContextoOperacionalAtivoAtual({ unidadeId: "fora" }, dependenciasDeEscopo(escopo), async () => null), new Error("Seleção de contexto não autorizada."));
+  });
+}
+test("somente unidadeId é consumido e ancestrais externos não substituem dados persistidos", async () => {
+  const entradaHostil = { unidadeId: "unidade-1", redeId: "rede-forjada", operacaoId: "operacao-forjada", areaOperacionalId: "area-forjada", empresaId: "empresa-forjada" } as SelecaoContextoOperacional;
+  assert.deepEqual(await resolverContextoOperacionalAtivoAtual(entradaHostil, dependenciasDeEscopo("rede"), async () => unidadeReal), {
+    redeId: "rede-real", operacaoId: "operacao-real", areaOperacionalId: "area-real", empresaId: "empresa-real", unidadeId: "unidade-1",
+  });
+});
+test("seleção vazia falha sem consultar território", async () => {
+  let consultas = 0;
+  await assert.rejects(resolverContextoOperacionalAtivoAtual({ unidadeId: "   " }, dependenciasDeEscopo("rede"), async () => { consultas += 1; return null; }), new Error("Seleção de contexto não autorizada."));
+  assert.equal(consultas, 0);
+});
+test("erro de infraestrutura territorial não é convertido em seleção inválida", async () => {
+  const erro = new Error("infraestrutura");
+  await assert.rejects(resolverContextoOperacionalAtivoAtual({ unidadeId: "unidade-1" }, dependenciasDeEscopo("rede"), async () => { throw erro; }), erro);
+});
+test("resolução específica independe de listagem, ordenação e paginação do catálogo", async () => {
+  let consultas = 0;
+  const resultado = await resolverContextoOperacionalAtivoAtual({ unidadeId: "unidade-1" }, dependenciasDeEscopo("rede"), async (vinculo, unidadeId) => {
+    consultas += 1;
+    assert.equal(vinculo.redeId, "rede-real");
+    assert.equal(unidadeId, "unidade-1");
+    return unidadeReal;
+  });
+  assert.equal(consultas, 1);
+  assert.deepEqual(resultado, {
+    redeId: "rede-real", operacaoId: "operacao-real", areaOperacionalId: "area-real", empresaId: "empresa-real", unidadeId: "unidade-1",
+  });
 });
 test("usuário e contexto são resolvidos juntos com uma única autenticação", async () => {
   let autenticacoes = 0;

@@ -49,6 +49,10 @@ export type ContextoOperacionalAtivo = {
   readonly unidadeId: string;
 };
 
+export type SelecaoContextoOperacional = {
+  readonly unidadeId: string;
+};
+
 export type UnidadeOperacionalPermitida = ContextoOperacionalAtivo & {
   readonly codigo: string;
   readonly numero: number;

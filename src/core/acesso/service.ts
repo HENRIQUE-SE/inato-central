@@ -75,3 +75,15 @@ export function contextoOperacionalCorrespondeAUnidade(
     && contexto.empresaId === unidade.empresaId
     && contexto.unidadeId === unidade.unidadeId;
 }
+
+export function criarContextoOperacionalDaUnidade(
+  unidade: UnidadeOperacionalPermitida
+): ContextoOperacionalAtivo {
+  return {
+    redeId: unidade.redeId,
+    operacaoId: unidade.operacaoId,
+    areaOperacionalId: unidade.areaOperacionalId,
+    empresaId: unidade.empresaId,
+    unidadeId: unidade.unidadeId,
+  };
+}

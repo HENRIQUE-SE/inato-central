@@ -17,7 +17,9 @@ type LinhaUnidade = {
   area_operacional: LinhaAreaOperacional | null;
 };
 type ResultadoConsulta = { data: LinhaUnidade[] | null; error: unknown };
+type ResultadoConsultaUnidade = { data: LinhaUnidade | null; error: unknown };
 export type ConsultarUnidadesOperacionais = (vinculo: VinculoAcesso) => Promise<ResultadoConsulta>;
+export type ConsultarUnidadeOperacional = (vinculo: VinculoAcesso, unidadeId: string) => Promise<ResultadoConsultaUnidade>;
 
 const SELECAO_UNIDADES = `
   id,
@@ -42,7 +44,7 @@ const SELECAO_UNIDADES = `
   )
 `;
 
-async function consultarUnidadesOperacionais(vinculo: VinculoAcesso): Promise<ResultadoConsulta> {
+function criarConsultaTerritorial(vinculo: VinculoAcesso) {
   let consulta = supabase
     .from("unidades")
     .select(SELECAO_UNIDADES)
@@ -68,10 +70,21 @@ async function consultarUnidadesOperacionais(vinculo: VinculoAcesso): Promise<Re
       break;
   }
 
-  const { data, error } = await consulta
+  return consulta;
+}
+
+async function consultarUnidadesOperacionais(vinculo: VinculoAcesso): Promise<ResultadoConsulta> {
+  const { data, error } = await criarConsultaTerritorial(vinculo)
     .order("numero", { ascending: true })
     .order("nome", { ascending: true });
   return { data: data as unknown as LinhaUnidade[] | null, error };
+}
+
+async function consultarUnidadeOperacional(vinculo: VinculoAcesso, unidadeId: string): Promise<ResultadoConsultaUnidade> {
+  const { data, error } = await criarConsultaTerritorial(vinculo)
+    .eq("id", unidadeId)
+    .maybeSingle();
+  return { data: data as unknown as LinhaUnidade | null, error };
 }
 
 function mapearUnidade(linha: LinhaUnidade): UnidadeOperacionalPermitida | null {
@@ -108,4 +121,17 @@ export async function listarUnidadesOperacionaisPermitidas(
     unidades.push(unidade);
   }
   return unidades.sort((a, b) => a.numero - b.numero || a.nome.localeCompare(b.nome) || a.codigo.localeCompare(b.codigo));
+}
+
+export async function obterUnidadeOperacionalPermitida(
+  vinculo: VinculoAcesso,
+  unidadeId: string,
+  consultar: ConsultarUnidadeOperacional = consultarUnidadeOperacional
+): Promise<UnidadeOperacionalPermitida | null> {
+  if (!vinculoPossuiTerritorioValido(vinculo)) return null;
+  const { data, error } = await consultar(vinculo, unidadeId);
+  if (error) throw error;
+  if (data === null) return null;
+  const unidade = mapearUnidade(data);
+  return unidade !== null && unidadePertenceAoTerritorio(vinculo, unidade) ? unidade : null;
 }

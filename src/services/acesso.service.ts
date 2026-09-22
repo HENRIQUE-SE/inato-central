@@ -1,5 +1,5 @@
-import { contextoOperacionalCorrespondeAUnidade, derivarContextoOperacionalAtivo, possuiPermissao, type CodigoPermissaoAcesso, type ContextoAcesso } from "@/core/acesso";
-import type { ContextoOperacionalAtivo, UnidadeOperacionalPermitida } from "@/core/organizacao";
+import { contextoOperacionalCorrespondeAUnidade, criarContextoOperacionalDaUnidade, derivarContextoOperacionalAtivo, possuiPermissao, type CodigoPermissaoAcesso, type ContextoAcesso } from "@/core/acesso";
+import type { ContextoOperacionalAtivo, SelecaoContextoOperacional, UnidadeOperacionalPermitida } from "@/core/organizacao";
 import { obterUsuarioAtualAutenticado, type UsuarioAutenticado } from "./auth.service";
 
 type DependenciasAcesso = {
@@ -57,6 +57,14 @@ async function listarUnidadesPersistidas(vinculo: ContextoAcesso["vinculo"]): Pr
   return listarUnidadesOperacionaisPermitidas(vinculo);
 }
 
+async function obterUnidadePersistida(
+  vinculo: ContextoAcesso["vinculo"],
+  unidadeId: string
+): Promise<UnidadeOperacionalPermitida | null> {
+  const { obterUnidadeOperacionalPermitida } = await import("@/lib/organizacao/organizacao.repository");
+  return obterUnidadeOperacionalPermitida(vinculo, unidadeId);
+}
+
 export async function obterUnidadesOperacionaisPermitidasAtuais(
   dependencias: DependenciasAcesso = DEPENDENCIAS_PADRAO,
   listar: (vinculo: ContextoAcesso["vinculo"]) => Promise<UnidadeOperacionalPermitida[]> = listarUnidadesPersistidas
@@ -72,6 +80,31 @@ export async function contextoOperacionalSolicitadoEhPermitido(
 ): Promise<boolean> {
   const unidades = await obterUnidadesOperacionaisPermitidasAtuais(dependencias, listar);
   return unidades.some((unidade) => contextoOperacionalCorrespondeAUnidade(contextoSolicitado, unidade));
+}
+
+export async function resolverContextoOperacionalAtivoAtual(
+  selecao: SelecaoContextoOperacional | undefined,
+  dependencias: DependenciasAcesso = DEPENDENCIAS_PADRAO,
+  obter: (vinculo: ContextoAcesso["vinculo"], unidadeId: string) => Promise<UnidadeOperacionalPermitida | null> = obterUnidadePersistida
+): Promise<ContextoOperacionalAtivo | null> {
+  const contexto = await obterContextoAcessoAtual(dependencias);
+  if (contexto === null) throw new Error("Acesso não autorizado.");
+
+  const contextoAutomatico = derivarContextoOperacionalAtivo(contexto.vinculo);
+  if (contextoAutomatico !== null) {
+    if (selecao !== undefined && selecao.unidadeId !== contextoAutomatico.unidadeId) {
+      throw new Error("Seleção de contexto não autorizada.");
+    }
+    return contextoAutomatico;
+  }
+
+  if (selecao === undefined) return null;
+  const unidadeId = selecao.unidadeId.trim();
+  if (!unidadeId) throw new Error("Seleção de contexto não autorizada.");
+
+  const unidade = await obter(contexto.vinculo, unidadeId);
+  if (unidade === null) throw new Error("Seleção de contexto não autorizada.");
+  return criarContextoOperacionalDaUnidade(unidade);
 }
 
 export async function usuarioAtualPossuiPermissao(codigo: CodigoPermissaoAcesso, dependencias: DependenciasAcesso = DEPENDENCIAS_PADRAO): Promise<boolean> {

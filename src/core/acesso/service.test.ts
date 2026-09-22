@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CODIGOS_ESCOPO_ACESSO, CODIGOS_PERFIL_ACESSO, CODIGOS_PERMISSAO_ACESSO, PERMISSOES_INICIAIS_POR_PERFIL, type CodigoPerfilAcesso } from "./constants";
-import { contextoOperacionalCorrespondeAUnidade, derivarContextoOperacionalAtivo, possuiPermissao, unidadePertenceAoTerritorio, vinculoPossuiTerritorioValido } from "./service";
+import { contextoOperacionalCorrespondeAUnidade, criarContextoOperacionalDaUnidade, derivarContextoOperacionalAtivo, possuiPermissao, unidadePertenceAoTerritorio, vinculoPossuiTerritorioValido } from "./service";
 import type { ContextoAcesso } from "./types";
 
 function contexto(codigo: CodigoPerfilAcesso): ContextoAcesso {
@@ -88,6 +88,15 @@ test("contexto solicitado exige correspondência integral com a hierarquia persi
   for (const campo of ["redeId", "operacaoId", "areaOperacionalId", "empresaId", "unidadeId"] as const) {
     assert.equal(contextoOperacionalCorrespondeAUnidade({ ...contextoValido, [campo]: "forjado" }, unidadePermitida), false);
   }
+});
+test("contexto é construído somente com a hierarquia canônica da Unidade permitida", () => {
+  assert.deepEqual(criarContextoOperacionalDaUnidade(unidadePermitida), {
+    redeId: "rede",
+    operacaoId: "operacao",
+    areaOperacionalId: "area",
+    empresaId: "empresa",
+    unidadeId: "unidade",
+  });
 });
 test("administrador possui auditoria.visualizar", () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR), CODIGOS_PERMISSAO_ACESSO.AUDITORIA_VISUALIZAR), true));
 test("consultor não possui auditoria.visualizar", () => assert.equal(possuiPermissao(contexto(CODIGOS_PERFIL_ACESSO.CONSULTOR), CODIGOS_PERMISSAO_ACESSO.AUDITORIA_VISUALIZAR), false));

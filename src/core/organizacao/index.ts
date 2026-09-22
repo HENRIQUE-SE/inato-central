@@ -10,6 +10,7 @@ export type {
   ContextoOrganizacional,
   ContextoOperacionalAtivo,
   Empresa,
+  SelecaoContextoOperacional,
   Unidade,
   UnidadeOperacionalPermitida,
 } from "./types";
