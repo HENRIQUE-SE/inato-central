@@ -9,6 +9,7 @@ $files = @(
   (Join-Path $srcRoot "core\negociacoes\constants.ts"), (Join-Path $srcRoot "core\negociacoes\types.ts"),
   (Join-Path $srcRoot "core\negociacoes\service.ts"), (Join-Path $srcRoot "core\negociacoes\index.ts"),
   (Join-Path $srcRoot "core\negociacoes\service.test.ts"), (Join-Path $srcRoot "lib\negociacoes\negociacoes.repository.ts"),
+  (Join-Path $srcRoot "lib\negociacoes\negociacoes-autoridade-operacional.migration.test.ts"),
   (Join-Path $srcRoot "services\negociacoes.service.ts"), (Join-Path $srcRoot "services\negociacoes.service.test.ts"),
   (Join-Path $srcRoot "services\negociacoes.auditoria.ts"), (Join-Path $srcRoot "services\negociacoes.auditoria.test.ts")
 )
@@ -23,7 +24,11 @@ try {
   New-Item -ItemType Directory -Path $alias | Out-Null
   foreach ($diretorio in @("core", "lib", "services")) { if (Test-Path (Join-Path $tempRoot $diretorio)) { Copy-Item -Path (Join-Path $tempRoot $diretorio) -Destination $alias -Recurse } }
   Set-Content -LiteralPath (Join-Path $alias "lib\supabase.js") -Encoding UTF8 -Value 'exports.supabase = {};'
-  & node --test (Join-Path $tempRoot "core\negociacoes\service.test.js") (Join-Path $tempRoot "services\negociacoes.service.test.js") (Join-Path $tempRoot "services\negociacoes.auditoria.test.js")
+  & node --test `
+    (Join-Path $tempRoot "core\negociacoes\service.test.js") `
+    (Join-Path $tempRoot "lib\negociacoes\negociacoes-autoridade-operacional.migration.test.js") `
+    (Join-Path $tempRoot "services\negociacoes.service.test.js") `
+    (Join-Path $tempRoot "services\negociacoes.auditoria.test.js")
   if ($LASTEXITCODE -ne 0) { throw "Os testes de negociações falharam." }
 } catch { Write-Host $_ -ForegroundColor Red; $exitCode = 1 }
 finally { if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force } }
