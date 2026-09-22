@@ -17,6 +17,7 @@ $sourceFiles = @(
   (Join-Path $srcRoot "services\oportunidades.auditoria.ts"),
   (Join-Path $srcRoot "services\oportunidades.service.ts"),
   (Join-Path $srcRoot "services\oportunidades.service.test.ts"),
+  (Join-Path $srcRoot "lib\oportunidades\oportunidades-autoridade-operacional.migration.test.ts"),
   (Join-Path $srcRoot "types\oportunidade.ts")
 )
 
@@ -49,7 +50,9 @@ try {
   $aliasRoot = Join-Path $tempRoot "node_modules\@"
   New-Item -ItemType Directory -Path $aliasRoot | Out-Null
   Copy-Item -LiteralPath (Join-Path $tempRoot "core") -Destination (Join-Path $aliasRoot "core") -Recurse
-  & node --test (Join-Path $tempRoot "services\oportunidades.service.test.js")
+  & node --test `
+    (Join-Path $tempRoot "services\oportunidades.service.test.js") `
+    (Join-Path $tempRoot "lib\oportunidades\oportunidades-autoridade-operacional.migration.test.js")
   if ($LASTEXITCODE -ne 0) { throw "Os testes de Oportunidades falharam." }
 } catch {
   Write-Host $_ -ForegroundColor Red
