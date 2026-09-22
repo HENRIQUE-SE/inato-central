@@ -14,6 +14,7 @@ $files = @(
   (Join-Path $srcRoot "core\auditoria\constants.ts"), (Join-Path $srcRoot "core\auditoria\types.ts"), (Join-Path $srcRoot "core\auditoria\data.ts"),
   (Join-Path $srcRoot "core\auditoria\service.ts"), (Join-Path $srcRoot "core\auditoria\index.ts"),
   (Join-Path $srcRoot "lib\supabase.ts"), (Join-Path $srcRoot "lib\auditoria\auditoria.repository.ts"),
+  (Join-Path $srcRoot "lib\auditoria\auditoria-autoridade-operacional.migration.test.ts"),
   (Join-Path $srcRoot "services\auditoria.service.ts"), (Join-Path $srcRoot "services\auditoria.service.test.ts")
 )
 
@@ -31,7 +32,7 @@ try {
   $aliasCore = Join-Path $tempRoot "node_modules\@\core"
   New-Item -ItemType Directory -Path $aliasCore | Out-Null
   Copy-Item -Path (Join-Path $tempRoot "core\*") -Destination $aliasCore -Recurse
-  & node --test (Join-Path $tempRoot "services\auditoria.service.test.js")
+  & node --test (Join-Path $tempRoot "lib\auditoria\auditoria-autoridade-operacional.migration.test.js") (Join-Path $tempRoot "services\auditoria.service.test.js")
   if ($LASTEXITCODE -ne 0) { throw "Os testes de consulta falharam." }
 } catch {
   Write-Host $_ -ForegroundColor Red
