@@ -12,6 +12,7 @@ $files = @(
   (Join-Path $srcRoot "core\veiculos\index.ts"),
   (Join-Path $srcRoot "core\veiculos\service.test.ts"),
   (Join-Path $srcRoot "lib\veiculos\veiculos.repository.ts"),
+  (Join-Path $srcRoot "lib\veiculos\veiculos-autoridade-operacional.migration.test.ts"),
   (Join-Path $srcRoot "services\veiculos.service.ts"),
   (Join-Path $srcRoot "services\veiculos.service.test.ts"),
   (Join-Path $srcRoot "services\veiculos.auditoria.ts"),
@@ -31,7 +32,11 @@ try {
   New-Item -ItemType Directory -Path $aliasLib | Out-Null
   Copy-Item -Path (Join-Path $tempRoot "lib\*") -Destination $aliasLib -Recurse
   Set-Content -LiteralPath (Join-Path $aliasLib "supabase.js") -Encoding UTF8 -Value 'exports.supabase = {};'
-  & node --test (Join-Path $tempRoot "core\veiculos\service.test.js") (Join-Path $tempRoot "services\veiculos.service.test.js") (Join-Path $tempRoot "services\veiculos.auditoria.test.js")
+  & node --test `
+    (Join-Path $tempRoot "core\veiculos\service.test.js") `
+    (Join-Path $tempRoot "lib\veiculos\veiculos-autoridade-operacional.migration.test.js") `
+    (Join-Path $tempRoot "services\veiculos.service.test.js") `
+    (Join-Path $tempRoot "services\veiculos.auditoria.test.js")
   if ($LASTEXITCODE -ne 0) { throw "Os testes de veículos falharam." }
 } catch { Write-Host $_ -ForegroundColor Red; $exitCode = 1 }
 finally { if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force } }
