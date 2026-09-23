@@ -173,6 +173,7 @@ test("abertura resolve uma única autoridade e deriva dela usuário e cabeçalho
   let usuarioRecebido: unknown;
   const resultado = await obterDadosAuditoriaParaTela({ pagina: 2, termoPesquisa: "ABC" }, {
     obterAutoridade: async () => { resolucoes += 1; return { usuario, contexto: acesso }; },
+    obterContextoOperacional: async () => ({ redeId: "rede-matriz", operacaoId: "operacao-matriz", areaOperacionalId: "area-patrocinio", empresaId: acesso.vinculo.empresaId!, unidadeId: acesso.vinculo.unidadeId! }),
     listar: async (parametros, recebido) => { usuarioRecebido = recebido; assert.equal(parametros.pagina, 2); assert.equal(parametros.termoPesquisa, "ABC"); return { dados: [], total: 0, pagina: 2, itensPorPagina: 10, totalPaginas: 1 }; },
   });
   assert.equal(resolucoes, 1);
@@ -186,6 +187,7 @@ for (const [perfil, autorizado] of [["administrador", true], ["consultor", false
     let consultas = 0;
     const resultado = await obterDadosAuditoriaParaTela({}, {
       obterAutoridade: async () => ({ usuario: await resolverUsuario(), contexto: contexto(perfil, autorizado) }),
+      obterContextoOperacional: async () => ({ redeId: "rede-matriz", operacaoId: "operacao-matriz", areaOperacionalId: "area-patrocinio", empresaId: obterUnidadeAtual().empresaId, unidadeId: obterUnidadeAtual().id }),
       listar: async () => { consultas += 1; return { dados: [], total: 0, pagina: 1, itensPorPagina: 10, totalPaginas: 1 }; },
     });
     assert.equal(resultado.estado, autorizado ? "carregado" : "acesso_negado");
@@ -195,7 +197,7 @@ for (const [perfil, autorizado] of [["administrador", true], ["consultor", false
 
 test("ausência de autoridade redirecionável não consulta eventos", async () => {
   let consultou = false;
-  const resultado = await obterDadosAuditoriaParaTela({}, { obterAutoridade: async () => null, listar: async () => { consultou = true; throw new Error(); } });
+  const resultado = await obterDadosAuditoriaParaTela({}, { obterAutoridade: async () => null, obterContextoOperacional: async () => { throw new Error(); }, listar: async () => { consultou = true; throw new Error(); } });
   assert.deepEqual(resultado, { estado: "nao_autenticado" });
   assert.equal(consultou, false);
 });
@@ -241,7 +243,8 @@ test("abertura encaminha o sinal de cancelamento ate a consulta persistente", as
   let sinalRecebido: AbortSignal | undefined;
   await obterDadosAuditoriaParaTela({}, {
     obterAutoridade: async () => ({ usuario: await resolverUsuario(), contexto: contexto("administrador", true) }),
-    listar: async (_parametros, _usuario, sinal) => {
+    obterContextoOperacional: async () => ({ redeId: "rede-matriz", operacaoId: "operacao-matriz", areaOperacionalId: "area-patrocinio", empresaId: obterUnidadeAtual().empresaId, unidadeId: obterUnidadeAtual().id }),
+    listar: async (_parametros, _usuario, _contexto, sinal) => {
       sinalRecebido = sinal;
       return { dados: [], total: 0, pagina: 1, itensPorPagina: 10, totalPaginas: 1 };
     },

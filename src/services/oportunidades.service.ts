@@ -1,5 +1,6 @@
-import { derivarContextoOperacionalAtivo, possuiPermissao, CODIGOS_PERMISSAO_ACESSO } from "@/core/acesso";
+import { possuiPermissao, CODIGOS_PERMISSAO_ACESSO } from "@/core/acesso";
 import type { CodigoPermissaoAcesso } from "@/core/acesso";
+import type { ContextoOperacionalAtivo } from "@/core/organizacao";
 import type {
   ConsultaOportunidades,
   ResultadoOportunidadesPersistidas,
@@ -32,11 +33,12 @@ export type ListarOportunidadesResultado = ResultadoOportunidadesPersistidas & {
 
 type Dependencias = {
   obterContexto: () => Promise<ContextoAcessoAutenticado | null>;
-  obterPorId: (id: string) => Promise<Oportunidade | null>;
+  obterContextoOperacional: () => Promise<ContextoOperacionalAtivo>;
+  obterPorId: (id: string, contexto: ContextoOperacionalAtivo) => Promise<Oportunidade | null>;
   listar: (consulta: ConsultaOportunidades) => Promise<ResultadoOportunidadesPersistidas>;
   criar: (dados: DadosOportunidade & { empresa_id: string; unidade_id: string }) => Promise<Oportunidade>;
-  atualizar: (id: string, dados: DadosOportunidade) => Promise<Oportunidade>;
-  excluir: (id: string) => Promise<Oportunidade>;
+  atualizar: (id: string, dados: DadosOportunidade, contexto: ContextoOperacionalAtivo) => Promise<Oportunidade>;
+  excluir: (id: string, contexto: ContextoOperacionalAtivo) => Promise<Oportunidade>;
   auditarCriacao: (oportunidade: Oportunidade, contexto: ContextoAcessoAutenticado) => Promise<void>;
   auditarAlteracao: (oportunidade: Oportunidade, contexto: ContextoAcessoAutenticado) => Promise<void>;
   auditarExclusao: (oportunidade: Oportunidade, contexto: ContextoAcessoAutenticado) => Promise<void>;
@@ -44,11 +46,12 @@ type Dependencias = {
 
 const DEPENDENCIAS_PADRAO: Dependencias = {
   obterContexto: obterContextoAcessoAutenticadoAtual,
-  obterPorId: async (id) => (await import("@/lib/oportunidades/oportunidades.repository")).obterOportunidadePersistidaPorId(id),
+  obterContextoOperacional: async () => (await import("./contexto-operacional.service")).exigirContextoOperacionalAtivoAtual(),
+  obterPorId: async (id, contexto) => (await import("@/lib/oportunidades/oportunidades.repository")).obterOportunidadePersistidaPorId(id, contexto),
   listar: async (consulta) => (await import("@/lib/oportunidades/oportunidades.repository")).listarOportunidadesPersistidas(consulta),
   criar: async (dados) => (await import("@/lib/oportunidades/oportunidades.repository")).criarOportunidadePersistida(dados),
-  atualizar: async (id, dados) => (await import("@/lib/oportunidades/oportunidades.repository")).atualizarOportunidadePersistida(id, dados),
-  excluir: async (id) => (await import("@/lib/oportunidades/oportunidades.repository")).excluirOportunidadePersistida(id),
+  atualizar: async (id, dados, contexto) => (await import("@/lib/oportunidades/oportunidades.repository")).atualizarOportunidadePersistida(id, dados, contexto),
+  excluir: async (id, contexto) => (await import("@/lib/oportunidades/oportunidades.repository")).excluirOportunidadePersistida(id, contexto),
   auditarCriacao: (oportunidade, contexto) => registrarAuditoriaCriacaoOportunidade(oportunidade, undefined, contexto),
   auditarAlteracao: (oportunidade, contexto) => registrarAuditoriaAlteracaoOportunidade(oportunidade, undefined, contexto),
   auditarExclusao: (oportunidade, contexto) => registrarAuditoriaExclusaoOportunidade(oportunidade, undefined, contexto),
@@ -75,7 +78,9 @@ export async function obterOportunidadePorId(
   id: string,
   dependencias: Dependencias = DEPENDENCIAS_PADRAO
 ): Promise<Oportunidade | null> {
-  return dependencias.obterPorId(id);
+  await exigirContexto(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_VISUALIZAR, dependencias);
+  const contexto = await dependencias.obterContextoOperacional();
+  return dependencias.obterPorId(id, contexto);
 }
 
 export async function listarOportunidades(
@@ -91,7 +96,8 @@ export async function listarOportunidades(
     CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_VISUALIZAR,
     dependencias
   );
-  const resultado = await dependencias.listar({ pagina, itensPorPagina, termoPesquisa, status });
+  const contextoOperacional = await dependencias.obterContextoOperacional();
+  const resultado = await dependencias.listar({ pagina, itensPorPagina, termoPesquisa, status, contexto: contextoOperacional });
   return {
     ...resultado,
     pagina,
@@ -110,8 +116,7 @@ export async function criarOportunidade(
   dependencias: Dependencias = DEPENDENCIAS_PADRAO
 ): Promise<Oportunidade> {
   const contexto = await exigirContexto(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_CRIAR, dependencias);
-  const contextoOperacional = derivarContextoOperacionalAtivo(contexto.contexto.vinculo);
-  if (contextoOperacional === null) throw new Error("Acesso não autorizado.");
+  const contextoOperacional = await dependencias.obterContextoOperacional();
   const oportunidade = await dependencias.criar({
     ...dados,
     empresa_id: contextoOperacional.empresaId,
@@ -127,7 +132,8 @@ export async function atualizarOportunidade(
   dependencias: Dependencias = DEPENDENCIAS_PADRAO
 ): Promise<Oportunidade> {
   const contexto = await exigirContexto(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_ALTERAR, dependencias);
-  const oportunidade = await dependencias.atualizar(id, dados);
+  const contextoOperacional = await dependencias.obterContextoOperacional();
+  const oportunidade = await dependencias.atualizar(id, dados, contextoOperacional);
   await dependencias.auditarAlteracao(oportunidade, contexto);
   return oportunidade;
 }
@@ -137,6 +143,7 @@ export async function excluirOportunidade(
   dependencias: Dependencias = DEPENDENCIAS_PADRAO
 ): Promise<void> {
   const contexto = await exigirContexto(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_EXCLUIR, dependencias);
-  const oportunidade = await dependencias.excluir(id);
+  const contextoOperacional = await dependencias.obterContextoOperacional();
+  const oportunidade = await dependencias.excluir(id, contextoOperacional);
   await dependencias.auditarExclusao(oportunidade, contexto);
 }

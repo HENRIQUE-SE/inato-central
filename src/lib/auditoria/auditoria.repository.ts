@@ -5,6 +5,7 @@ import type {
   ResultadoAuditoria,
   ValorAuditoria,
 } from "@/core/auditoria";
+import type { ContextoOperacionalAtivo } from "@/core/organizacao";
 
 type LinhaAuditoria = {
   id: string;
@@ -22,6 +23,7 @@ type LinhaAuditoria = {
 };
 
 export type ListarEventosAuditoriaPersistidosParametros = {
+  contexto: ContextoOperacionalAtivo;
   pagina?: number;
   itensPorPagina?: number;
   termoPesquisa?: string;
@@ -94,7 +96,8 @@ export async function listarEventosAuditoriaPersistidos({
   modulo,
   acao,
   resultado,
-}: ListarEventosAuditoriaPersistidosParametros = {}, sinal?: AbortSignal): Promise<ListarEventosAuditoriaPersistidosResultado> {
+  contexto,
+}: ListarEventosAuditoriaPersistidosParametros, sinal?: AbortSignal): Promise<ListarEventosAuditoriaPersistidosResultado> {
 
   const paginaValida = Math.max(1, pagina);
   const inicio = (paginaValida - 1) * itensPorPagina;
@@ -102,6 +105,8 @@ export async function listarEventosAuditoriaPersistidos({
   let consulta = supabase
     .from("auditoria_eventos")
     .select("*", { count: "exact" })
+    .eq("empresa_id", contexto.empresaId)
+    .eq("unidade_id", contexto.unidadeId)
     .order("criado_em", { ascending: false })
     .range(inicio, fim);
 

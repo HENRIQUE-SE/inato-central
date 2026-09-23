@@ -107,6 +107,16 @@ export async function definirPreferenciaContextoOperacionalAtual(
   return resultado;
 }
 
+export async function exigirContextoOperacionalAtivoAtual(
+  complemento: Partial<DependenciasContextoOperacional> = {}
+): Promise<ContextoOperacionalAtivo> {
+  const resultado = await obterContextoOperacionalPreferidoAtual(complemento);
+  if (resultado.estado !== "contexto_resolvido") {
+    throw new Error("Contexto operacional não selecionado.");
+  }
+  return resultado.contexto;
+}
+
 export function limparPreferenciaContextoOperacional(
   complemento: Pick<DependenciasContextoOperacional, "removerPreferencia"> = {
     removerPreferencia: removerPreferenciaContextoOperacional,

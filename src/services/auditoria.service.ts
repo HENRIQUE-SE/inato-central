@@ -13,6 +13,7 @@ import type {
   ValorAuditoria,
 } from "@/core/auditoria";
 import { CODIGOS_PERMISSAO_ACESSO, possuiPermissao } from "@/core/acesso";
+import type { ContextoOperacionalAtivo } from "@/core/organizacao";
 import { obterUnidadeAtual } from "@/core/organizacao";
 import {
   obterContextoAcessoAutenticadoAtual,
@@ -32,7 +33,7 @@ export type AuditoriaItem = {
   placa: string;
 };
 
-export type ListarAuditoriaParametros = ListarEventosAuditoriaPersistidosParametros;
+export type ListarAuditoriaParametros = Omit<ListarEventosAuditoriaPersistidosParametros, "contexto">;
 
 export type ListarAuditoriaResultado = {
   dados: AuditoriaItem[];
@@ -43,8 +44,9 @@ export type ListarAuditoriaResultado = {
 };
 
 type ConsultarPersistencia = (
-  parametros: ListarEventosAuditoriaPersistidosParametros,
-  sinal?: AbortSignal
+  parametros: ListarAuditoriaParametros,
+  sinal?: AbortSignal,
+  contexto?: ContextoOperacionalAtivo
 ) => Promise<ListarEventosAuditoriaPersistidosResultado>;
 type ResolverUsuarioAutenticado = () => Promise<UsuarioAutenticado | null>;
 
@@ -59,22 +61,26 @@ export type ResultadoTelaAuditoria =
 
 export type DependenciasTelaAuditoria = {
   obterAutoridade: () => Promise<ContextoAcessoAutenticado | null>;
-  listar: (parametros: ListarAuditoriaParametros, usuario: UsuarioAutenticado, sinal?: AbortSignal) => Promise<ListarAuditoriaResultado>;
+  obterContextoOperacional: () => Promise<ContextoOperacionalAtivo>;
+  listar: (parametros: ListarAuditoriaParametros, usuario: UsuarioAutenticado, contexto: ContextoOperacionalAtivo, sinal?: AbortSignal) => Promise<ListarAuditoriaResultado>;
 };
 
 const DEPENDENCIAS_TELA: DependenciasTelaAuditoria = {
   obterAutoridade: () => obterContextoAcessoAutenticadoAtual(),
-  listar: (parametros, usuario, sinal) => listarAuditoria(parametros, undefined, async () => usuario, sinal),
+  obterContextoOperacional: async () => (await import("./contexto-operacional.service")).exigirContextoOperacionalAtivoAtual(),
+  listar: (parametros, usuario, contexto, sinal) => listarAuditoria(parametros, undefined, async () => usuario, sinal, contexto),
 };
 
 async function consultarPersistencia(
-  parametros: ListarEventosAuditoriaPersistidosParametros,
-  sinal?: AbortSignal
+  parametros: ListarAuditoriaParametros,
+  sinal?: AbortSignal,
+  contexto?: ContextoOperacionalAtivo
 ): Promise<ListarEventosAuditoriaPersistidosResultado> {
   const { listarEventosAuditoriaPersistidos } = await import(
     "@/lib/auditoria/auditoria.repository"
   );
-  return listarEventosAuditoriaPersistidos(parametros, sinal);
+  if (contexto === undefined) throw new Error("Contexto operacional não selecionado.");
+  return listarEventosAuditoriaPersistidos({ ...parametros, contexto }, sinal);
 }
 
 export class ErroConsultaAuditoriaCancelada extends Error {
@@ -152,7 +158,8 @@ export async function listarAuditoria(
   parametros: ListarAuditoriaParametros = {},
   consultar: ConsultarPersistencia = consultarPersistencia,
   resolverUsuario: ResolverUsuarioAutenticado = obterUsuarioAtualAutenticado,
-  sinal?: AbortSignal
+  sinal?: AbortSignal,
+  contexto?: ContextoOperacionalAtivo
 ): Promise<ListarAuditoriaResultado> {
 
   const parametrosNormalizados = {
@@ -164,7 +171,7 @@ export async function listarAuditoria(
   try {
 
     const [resultado, usuarioAtual] = await Promise.all([
-      consultar(parametrosNormalizados, sinal),
+      consultar(parametrosNormalizados, sinal, contexto),
       resolverUsuario(),
     ]);
 
@@ -203,6 +210,7 @@ export async function obterDadosAuditoriaParaTela(
   if (!possuiPermissao(autoridade.contexto, CODIGOS_PERMISSAO_ACESSO.AUDITORIA_VISUALIZAR)) {
     return { estado: "acesso_negado" };
   }
+  const contextoOperacional = await dependencias.obterContextoOperacional();
 
   const unidade = obterUnidadeAtual();
   const usuarioVisivel = {
@@ -211,7 +219,7 @@ export async function obterDadosAuditoriaParaTela(
     unidade: autoridade.contexto.vinculo.unidadeId === unidade.id ? unidade.nome : "Unidade não identificada",
   };
 
-  const auditoria = await dependencias.listar(parametros, autoridade.usuario, sinal);
+  const auditoria = await dependencias.listar(parametros, autoridade.usuario, contextoOperacional, sinal);
   return { estado: "carregado", auditoria, usuarioVisivel };
 }
 

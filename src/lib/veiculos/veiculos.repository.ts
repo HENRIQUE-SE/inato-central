@@ -9,6 +9,7 @@ import {
 } from "@/core/veiculos";
 import type { OportunidadeDisponivelParaVeiculo } from "@/core/veiculos/types";
 import { supabase } from "@/lib/supabase";
+import type { ContextoOperacionalAtivo } from "@/core/organizacao";
 
 type LinhaVeiculo = {
   id: string;
@@ -97,6 +98,13 @@ type ExecutarTransicaoDisponivel = (
   parametros: ParametrosMarcarDisponivel
 ) => Promise<ResultadoVeiculo>;
 
+function exigirContexto(
+  contexto: ContextoOperacionalAtivo | undefined
+): ContextoOperacionalAtivo {
+  if (contexto === undefined) throw new Error("Contexto operacional não selecionado.");
+  return contexto;
+}
+
 function mapearVeiculo(linha: LinhaVeiculo): Veiculo {
   return {
     id: linha.id,
@@ -122,23 +130,27 @@ function mapearVeiculo(linha: LinhaVeiculo): Veiculo {
   };
 }
 
-async function consultarVeiculos(): Promise<ResultadoConsultaVeiculos> {
+async function consultarVeiculos(contexto: ContextoOperacionalAtivo): Promise<ResultadoConsultaVeiculos> {
   return supabase
     .from("veiculos")
     .select("*")
+    .eq("empresa_id", contexto.empresaId)
+    .eq("unidade_id", contexto.unidadeId)
     .is("arquivado_em", null)
     .order("criado_em", { ascending: false });
 }
 
-async function consultarResumoVeiculos(): Promise<ResultadoConsultaResumoVeiculos> {
+async function consultarResumoVeiculos(contexto: ContextoOperacionalAtivo): Promise<ResultadoConsultaResumoVeiculos> {
   return supabase
     .from("veiculos")
     .select("id, placa, marca, modelo, versao, ano_fabricacao, ano_modelo, quilometragem, proprietario_nome, status")
+    .eq("empresa_id", contexto.empresaId)
+    .eq("unidade_id", contexto.unidadeId)
     .is("arquivado_em", null)
     .order("criado_em", { ascending: false });
 }
 
-async function consultarOportunidadesDisponiveis(): Promise<ResultadoConsultaOportunidadesDisponiveis> {
+async function consultarOportunidadesDisponiveis(contexto: ContextoOperacionalAtivo): Promise<ResultadoConsultaOportunidadesDisponiveis> {
   const { data, error } = await supabase
     .from("oportunidades")
     .select(`
@@ -148,6 +160,8 @@ async function consultarOportunidadesDisponiveis(): Promise<ResultadoConsultaOpo
       placa,
       veiculos_vinculados:veiculos!veiculos_oportunidade_fk(id)
     `)
+    .eq("empresa_id", contexto.empresaId)
+    .eq("unidade_id", contexto.unidadeId)
     .is("veiculos_vinculados.arquivado_em", null)
     .is("veiculos_vinculados", null)
     .order("created_at", { ascending: false });
@@ -178,17 +192,20 @@ async function inserirVeiculo(
   return supabase.from("veiculos").insert(dados).select("*").single();
 }
 
-async function consultarVeiculoPorId(id: string): Promise<ResultadoVeiculo> {
+async function consultarVeiculoPorId(id: string, contexto: ContextoOperacionalAtivo): Promise<ResultadoVeiculo> {
   return supabase
     .from("veiculos")
     .select("*")
     .eq("id", id)
+    .eq("empresa_id", contexto.empresaId)
+    .eq("unidade_id", contexto.unidadeId)
     .is("arquivado_em", null)
     .maybeSingle();
 }
 
 async function consultarFichaVeiculoPorId(
-  id: string
+  id: string,
+  contexto: ContextoOperacionalAtivo
 ): Promise<ResultadoConsultaFichaVeiculo> {
   const { data, error } = await supabase
     .from("veiculos")
@@ -221,6 +238,8 @@ async function consultarFichaVeiculoPorId(
       )
     `)
     .eq("id", id)
+    .eq("empresa_id", contexto.empresaId)
+    .eq("unidade_id", contexto.unidadeId)
     .is("arquivado_em", null)
     .maybeSingle();
   return {
@@ -259,12 +278,15 @@ async function executarTransicaoDisponivel(
 }
 
 export async function listarVeiculosPersistidos(
-  executarConsulta: ExecutarConsultaVeiculos = consultarVeiculos
+  executarConsulta?: ExecutarConsultaVeiculos,
+  contexto?: ContextoOperacionalAtivo
 ): Promise<ListagemVeiculos> {
 
 
 
-  const { data, error } = await executarConsulta();
+  const { data, error } = executarConsulta
+    ? await executarConsulta()
+    : await consultarVeiculos(exigirContexto(contexto));
 
 
   if (error) throw error;
@@ -276,11 +298,14 @@ export async function listarVeiculosPersistidos(
 }
 
 export async function listarResumoVeiculosPersistidos(
-  executarConsulta: ExecutarConsultaResumoVeiculos = consultarResumoVeiculos
+  executarConsulta?: ExecutarConsultaResumoVeiculos,
+  contexto?: ContextoOperacionalAtivo
 ): Promise<ListagemResumidaVeiculos> {
 
 
-  const { data, error } = await executarConsulta();
+  const { data, error } = executarConsulta
+    ? await executarConsulta()
+    : await consultarResumoVeiculos(exigirContexto(contexto));
 
   if (error) throw error;
 
@@ -291,9 +316,12 @@ export async function listarResumoVeiculosPersistidos(
 }
 
 export async function listarOportunidadesDisponiveisParaVeiculoPersistidas(
-  executarConsulta: ExecutarConsultaOportunidadesDisponiveis = consultarOportunidadesDisponiveis
+  executarConsulta?: ExecutarConsultaOportunidadesDisponiveis,
+  contexto?: ContextoOperacionalAtivo
 ): Promise<readonly OportunidadeDisponivelParaVeiculo[]> {
-  const { data, error } = await executarConsulta();
+  const { data, error } = executarConsulta
+    ? await executarConsulta()
+    : await consultarOportunidadesDisponiveis(exigirContexto(contexto));
   if (error) throw error;
   return Object.freeze((data ?? []).map(({
     id,
@@ -332,12 +360,15 @@ export async function criarVeiculoPersistido(
 
 export async function obterVeiculoPersistidoPorId(
   id: string,
-  executarObtencao: ExecutarObtencaoVeiculo = consultarVeiculoPorId
+  executarObtencao?: ExecutarObtencaoVeiculo,
+  contexto?: ContextoOperacionalAtivo
 ): Promise<Veiculo | null> {
 
 
 
-  const { data, error } = await executarObtencao(id);
+  const { data, error } = executarObtencao
+    ? await executarObtencao(id)
+    : await consultarVeiculoPorId(id, exigirContexto(contexto));
 
 
   if (error) throw error;
@@ -350,11 +381,14 @@ export async function obterVeiculoPersistidoPorId(
 
 export async function obterFichaVeiculoPersistidaPorId(
   id: string,
-  executarConsulta: ExecutarConsultaFichaVeiculo = consultarFichaVeiculoPorId
+  executarConsulta?: ExecutarConsultaFichaVeiculo,
+  contexto?: ContextoOperacionalAtivo
 ): Promise<FichaVeiculoPersistida | null> {
 
 
-  const { data, error } = await executarConsulta(id);
+  const { data, error } = executarConsulta
+    ? await executarConsulta(id)
+    : await consultarFichaVeiculoPorId(id, exigirContexto(contexto));
 
   if (error) throw error;
   if (data === null) return null;

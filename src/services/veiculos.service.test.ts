@@ -27,6 +27,7 @@ const CONTEXTO: ContextoAcesso = {
   perfil: { id: "p", codigo: "administrador", nome: "Administrador", descricao: null, ativo: true, criadoEm: "2026-08-08T00:00:00.000Z" },
   permissoes: [],
 };
+const CONTEXTO_OPERACIONAL = { redeId: "rede-matriz", operacaoId: "operacao-matriz", areaOperacionalId: "area-patrocinio", empresaId: "empresa-contexto", unidadeId: "unidade-contexto" } as const;
 
 const FORMULARIO: DadosFormularioVeiculo = {
   oportunidadeId: " oportunidade-1 ", proprietarioNome: " Proprietário ", placa: " abc1d23 ",
@@ -47,6 +48,7 @@ function dependenciasCriacao(
   alteracoes: Partial<DependenciasVeiculos> = {}
 ): Partial<DependenciasVeiculos> {
   return {
+    obterContextoOperacional: async () => CONTEXTO_OPERACIONAL,
     obterUsuario: async () => ({ id: "usuario-1", email: "usuario@inato.test" }),
     exigirCriacao: async () => CONTEXTO,
     criar: async (dados) => veiculo(dados),
@@ -58,6 +60,7 @@ function dependenciasCriacao(
 test("lista veículos após autorização", async () => {
   const resultado = await listarVeiculos({
     exigirVisualizacao: async () => CONTEXTO,
+    obterContextoOperacional: async () => CONTEXTO_OPERACIONAL,
     listar: async () => ({ dados: [], total: 0 }),
   });
   assert.deepEqual(resultado, { dados: [], total: 0 });
@@ -66,6 +69,7 @@ test("lista veículos após autorização", async () => {
 test("listagem converte erro técnico", async () => {
   await assert.rejects(listarVeiculos({
     exigirVisualizacao: async () => CONTEXTO,
+    obterContextoOperacional: async () => CONTEXTO_OPERACIONAL,
     listar: async () => { throw new Error("falha"); },
   }), new Error("Não foi possível carregar os veículos."));
 });
@@ -119,13 +123,14 @@ for (const perfil of ["teste", "financeiro"] as const) {
   });
 }
 
-test("vínculo sem unidade não cria veículo", async () => {
+test("escopo superior sem contexto selecionado não cria veículo", async () => {
   let repositoryChamado = false;
   const contextoSemUnidade = { ...CONTEXTO, vinculo: { ...CONTEXTO.vinculo, unidadeId: null } };
   await assert.rejects(criarVeiculo(FORMULARIO, dependenciasCriacao({
     exigirCriacao: async () => contextoSemUnidade,
+    obterContextoOperacional: async () => { throw new Error("Contexto operacional não selecionado."); },
     criar: async (dados) => { repositoryChamado = true; return veiculo(dados); },
-  })), new Error("Acesso não autorizado."));
+  })), new Error("Contexto operacional não selecionado."));
   assert.equal(repositoryChamado, false);
 });
 
@@ -164,6 +169,7 @@ test("auditoria ocorre depois da persistência bem-sucedida", async () => {
 test("seleção omite oportunidades já vinculadas", async () => {
   const resultado = await listarOportunidadesDisponiveisParaVeiculo({
     exigirVisualizacao: async () => CONTEXTO,
+    obterContextoOperacional: async () => CONTEXTO_OPERACIONAL,
     listarOportunidadesDisponiveis: async () => [
       { id: "o-2", proprietario_nome: "Dois", veiculo_informado: "Carro 2", placa: "BBB" },
     ],
@@ -206,7 +212,7 @@ function veiculoAtual(): Veiculo {
 
 function dependenciasAtualizacao(alteracoes: Partial<DependenciasVeiculos> = {}): Partial<DependenciasVeiculos> {
   const atual = veiculoAtual();
-  return { obterUsuario: async () => ({ id: "usuario-1", email: "usuario@inato.test" }), exigirVisualizacao: async () => CONTEXTO, exigirAlteracao: async () => CONTEXTO, obterPorId: async () => atual, obterFichaPorId: async () => ({ veiculo: atual, oportunidade: null }), atualizar: async (_id, dados) => ({ ...atual, ...dados, atualizadoEm: "novo" }), auditarAlteracao: async () => undefined, ...alteracoes };
+  return { obterUsuario: async () => ({ id: "usuario-1", email: "usuario@inato.test" }), obterContextoOperacional: async () => CONTEXTO_OPERACIONAL, exigirVisualizacao: async () => CONTEXTO, exigirAlteracao: async () => CONTEXTO, obterPorId: async () => atual, obterFichaPorId: async () => ({ veiculo: atual, oportunidade: null }), atualizar: async (_id, dados) => ({ ...atual, ...dados, atualizadoEm: "novo" }), auditarAlteracao: async () => undefined, ...alteracoes };
 }
 
 test("obtém veículo com autenticação e permissão", async () => assert.equal((await obterVeiculoPorId("veiculo-1", dependenciasAtualizacao())).id, "veiculo-1"));
@@ -366,7 +372,7 @@ test("ficha não contém consulta independente posterior da oportunidade", () =>
   const inicio = fonte.indexOf("export async function obterFichaVeiculoPorId");
   const fim = fonte.indexOf("export function criarCarregadorFichaVeiculo", inicio);
   const casoDeUso = fonte.slice(inicio, fim);
-  assert.match(casoDeUso, /deps\.obterFichaPorId\(id\)/);
+  assert.match(casoDeUso, /deps\.obterFichaPorId\(id, contextoOperacional\)/);
   assert.doesNotMatch(casoDeUso, /Promise\.all|\.map\(/);
 });
 test("repositório atualiza somente campos editáveis, inclui atualizado_em e mapeia retorno", async () => {
@@ -379,6 +385,7 @@ test("repositório atualiza somente campos editáveis, inclui atualizado_em e ma
 function dependenciasConclusao(alteracoes: Partial<DependenciasVeiculos> = {}): Partial<DependenciasVeiculos> {
   const atual = veiculoAtual();
   return {
+    obterContextoOperacional: async () => CONTEXTO_OPERACIONAL,
     obterUsuario: async () => ({ id: "usuario-1", email: "usuario@inato.test" }),
     exigirConclusaoPreparacao: async () => CONTEXTO,
     obterPorId: async () => atual,
@@ -421,6 +428,7 @@ test("repositório chama somente a RPC específica com p_veiculo_id e mapeia ret
 function dependenciasDisponibilizacao(alteracoes: Partial<DependenciasVeiculos> = {}): Partial<DependenciasVeiculos> {
   const pronto = { ...veiculoAtual(), status: STATUS_VEICULO.PRONTO_PARA_ANUNCIAR };
   return {
+    obterContextoOperacional: async () => CONTEXTO_OPERACIONAL,
     obterUsuario: async () => ({ id: "usuario-1", email: "usuario@inato.test" }),
     exigirConclusaoPublicacao: async () => CONTEXTO,
     obterPorId: async () => pronto,
@@ -540,6 +548,7 @@ test("abertura da listagem resolve autoridade uma vez e consulta somente o resum
   let autoridades = 0, consultas = 0, oportunidades = 0;
   const resultado = await abrirListagemVeiculos({
     obterAutoridade: async () => { autoridades += 1; return autoridadeListagem("administrador"); },
+    obterContextoOperacional: async () => CONTEXTO_OPERACIONAL,
     listarResumo: async () => { consultas += 1; return { dados: [RESUMO_VEICULO], total: 1 }; },
     listarOportunidadesDisponiveis: async () => { oportunidades += 1; return []; },
   });
@@ -558,6 +567,7 @@ for (const [perfil, estado, criar] of [
     let consultas = 0;
     const resultado = await abrirListagemVeiculos({
       obterAutoridade: async () => autoridadeListagem(perfil),
+      obterContextoOperacional: async () => CONTEXTO_OPERACIONAL,
       listarResumo: async () => { consultas += 1; return { dados: [], total: 0 }; },
     });
     assert.equal(resultado.estado, estado); assert.equal(consultas, estado === "carregado" ? 1 : 0);
@@ -586,12 +596,12 @@ for (const origem of ["Auth", "contexto"] as const) {
 }
 
 test("abertura preserva lista vazia", async () => {
-  const resultado = await abrirListagemVeiculos({ obterAutoridade: async () => autoridadeListagem("administrador"), listarResumo: async () => ({ dados: [], total: 0 }) });
+  const resultado = await abrirListagemVeiculos({ obterAutoridade: async () => autoridadeListagem("administrador"), obterContextoOperacional: async () => CONTEXTO_OPERACIONAL, listarResumo: async () => ({ dados: [], total: 0 }) });
   assert.equal(resultado.estado, "carregado"); if (resultado.estado === "carregado") assert.deepEqual(resultado.veiculos, []);
 });
 
 test("falha ou negação RLS da consulta resumida usa mensagem controlada", async () => {
-  await assert.rejects(abrirListagemVeiculos({ obterAutoridade: async () => autoridadeListagem("administrador"), listarResumo: async () => { throw new Error("RLS"); } }), new Error("Não foi possível carregar os veículos."));
+  await assert.rejects(abrirListagemVeiculos({ obterAutoridade: async () => autoridadeListagem("administrador"), obterContextoOperacional: async () => CONTEXTO_OPERACIONAL, listarResumo: async () => { throw new Error("RLS"); } }), new Error("Não foi possível carregar os veículos."));
 });
 
 test("repository resumido devolve somente os campos da tabela", async () => {
@@ -655,6 +665,7 @@ test("caso de uso autoriza uma vez e nao carrega colecoes amplas", async () => {
   let autorizacoes = 0, consultasEspecificas = 0, consultasAmplasVeiculos = 0;
   const resultado = await listarOportunidadesDisponiveisParaVeiculo({
     exigirVisualizacao: async () => { autorizacoes += 1; return CONTEXTO; },
+    obterContextoOperacional: async () => CONTEXTO_OPERACIONAL,
     listarOportunidadesDisponiveis: async () => { consultasEspecificas += 1; return [{ id: "o", proprietario_nome: "P", veiculo_informado: "V", placa: "ABC" }]; },
     listar: async () => { consultasAmplasVeiculos += 1; return { dados: [], total: 0 }; },
   });
@@ -680,7 +691,7 @@ test("fluxo nao depende de limite 1000 nem da listagem publica de oportunidades"
   const casoDeUso = fonte.slice(inicio, fim);
   assert.doesNotMatch(casoDeUso, /1000|listarOportunidades\(|deps\.listar\(\)|Promise\.all/);
   assert.match(casoDeUso, /await deps\.exigirVisualizacao\(\)/);
-  assert.match(casoDeUso, /deps\.listarOportunidadesDisponiveis\(\)/);
+  assert.match(casoDeUso, /deps\.listarOportunidadesDisponiveis\(contexto\)/);
 });
 
 test("isolamento organizacional permanece delegado as duas RLS", () => {
@@ -713,6 +724,7 @@ test("Administrador Consultor e TESTE acessam a selecao e Financeiro permanece n
         }
         return contexto;
       },
+      obterContextoOperacional: async () => CONTEXTO_OPERACIONAL,
       listarOportunidadesDisponiveis: async () => { consultas += 1; return []; },
     });
     if (perfil === "financeiro") {

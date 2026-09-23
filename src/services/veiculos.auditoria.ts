@@ -5,7 +5,7 @@ import {
   registrarEventoAuditoria,
   type RegistroAuditoria,
 } from "@/core/auditoria";
-import { derivarContextoOperacionalAtivo, type ContextoAcesso } from "@/core/acesso";
+import type { ContextoAcesso } from "@/core/acesso";
 import type { Veiculo } from "@/core/veiculos";
 import { obterContextoAcessoAtual } from "./acesso.service";
 import { obterUsuarioAtualAutenticado, type UsuarioAutenticado } from "./auth.service";
@@ -27,12 +27,6 @@ const DEPENDENCIAS_PADRAO: DependenciasAuditoriaVeiculos = {
   persistir,
 };
 
-function contextoOperacionalDo(contexto: ContextoAcesso) {
-  const contextoOperacional = derivarContextoOperacionalAtivo(contexto.vinculo);
-  if (contextoOperacional === null) throw new Error("sem contexto operacional");
-  return contextoOperacional;
-}
-
 export async function registrarAuditoriaCriacaoVeiculo(
   veiculo: Veiculo,
   dependencias: DependenciasAuditoriaVeiculos = DEPENDENCIAS_PADRAO
@@ -43,10 +37,9 @@ export async function registrarAuditoriaCriacaoVeiculo(
       dependencias.obterContextoAcesso(),
     ]);
     if (usuario === null || contexto === null) throw new Error("sem contexto");
-    const contextoOperacional = contextoOperacionalDo(contexto);
     const evento = registrarEventoAuditoria({
-      empresaId: contextoOperacional.empresaId,
-      unidadeId: contextoOperacional.unidadeId,
+      empresaId: veiculo.empresaId,
+      unidadeId: veiculo.unidadeId,
       usuarioId: usuario.id,
       modulo: "veiculos",
       acao: ACOES_AUDITORIA.CRIAR,
@@ -82,10 +75,9 @@ export async function registrarAuditoriaAlteracaoVeiculo(
       dependencias.obterContextoAcesso(),
     ]);
     if (usuario === null || contexto === null) throw new Error("sem contexto");
-    const contextoOperacional = contextoOperacionalDo(contexto);
     const evento = registrarEventoAuditoria({
-      empresaId: contextoOperacional.empresaId,
-      unidadeId: contextoOperacional.unidadeId,
+      empresaId: veiculo.empresaId,
+      unidadeId: veiculo.unidadeId,
       usuarioId: usuario.id,
       modulo: "veiculos",
       acao: ACOES_AUDITORIA.ALTERAR,
@@ -121,10 +113,9 @@ export async function registrarAuditoriaConclusaoPreparacaoVeiculo(
       dependencias.obterContextoAcesso(),
     ]);
     if (usuario === null || contexto === null) throw new Error("sem contexto");
-    const contextoOperacional = contextoOperacionalDo(contexto);
     const evento = registrarEventoAuditoria({
-      empresaId: contextoOperacional.empresaId,
-      unidadeId: contextoOperacional.unidadeId,
+      empresaId: veiculoAtualizado.empresaId,
+      unidadeId: veiculoAtualizado.unidadeId,
       usuarioId: usuario.id,
       modulo: "veiculos",
       acao: ACOES_AUDITORIA.ALTERAR,
@@ -157,10 +148,9 @@ export async function registrarAuditoriaConclusaoPublicacaoVeiculo(
       dependencias.obterContextoAcesso(),
     ]);
     if (usuario === null || contexto === null) throw new Error("sem contexto");
-    const contextoOperacional = contextoOperacionalDo(contexto);
     const evento = registrarEventoAuditoria({
-      empresaId: contextoOperacional.empresaId,
-      unidadeId: contextoOperacional.unidadeId,
+      empresaId: veiculoAtualizado.empresaId,
+      unidadeId: veiculoAtualizado.unidadeId,
       usuarioId: usuario.id,
       modulo: "veiculos",
       acao: ACOES_AUDITORIA.ALTERAR,

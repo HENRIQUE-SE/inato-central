@@ -5,6 +5,7 @@ import type { ContextoOperacionalAtivo, PreferenciaContextoOperacional } from "@
 import { ErroSelecaoContextoOperacionalNaoAutorizada } from "./acesso.service";
 import {
   definirPreferenciaContextoOperacionalAtual,
+  exigirContextoOperacionalAtivoAtual,
   limparPreferenciaContextoOperacional,
   obterContextoOperacionalPreferidoAtual,
   type DependenciasContextoOperacional,
@@ -129,4 +130,18 @@ test("limpeza explícita prepara integração futura com logout", () => {
   let remocoes = 0;
   limparPreferenciaContextoOperacional({ removerPreferencia: () => { remocoes += 1; } });
   assert.equal(remocoes, 1);
+});
+
+test("contexto operacional obrigatório preserva resolução automática de Unidade", async () => {
+  assert.deepEqual(await exigirContextoOperacionalAtivoAtual(criarDependencias("unidade").deps), contextoResolvido);
+});
+
+test("contexto operacional obrigatório falha fechado sem preferência superior", async () => {
+  await assert.rejects(exigirContextoOperacionalAtivoAtual(criarDependencias("rede").deps), new Error("Contexto operacional não selecionado."));
+});
+
+test("contexto operacional obrigatório propaga erro real de infraestrutura", async () => {
+  const base = criarDependencias("rede", { usuarioId: "usuario-1", unidadeId: "unidade-1" });
+  const erro = new Error("infraestrutura indisponível");
+  await assert.rejects(exigirContextoOperacionalAtivoAtual({ ...base.deps, resolverContexto: async () => { throw erro; } }), erro);
 });

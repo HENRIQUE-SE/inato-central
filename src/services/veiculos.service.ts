@@ -14,10 +14,10 @@ import {
 import type { OportunidadeDisponivelParaVeiculo } from "@/core/veiculos/types";
 import {
   CODIGOS_PERMISSAO_ACESSO,
-  derivarContextoOperacionalAtivo,
   possuiPermissao,
   type ContextoAcesso,
 } from "@/core/acesso";
+import type { ContextoOperacionalAtivo } from "@/core/organizacao";
 import {
   exigirPermissao,
   obterContextoAcessoAutenticadoAtual,
@@ -68,11 +68,11 @@ export type ResultadoAberturaListagemVeiculos =
     };
 
 export type DependenciasVeiculos = {
-  listar: () => Promise<ListagemVeiculos>;
-  listarResumo: () => Promise<ListagemResumidaVeiculos>;
+  listar: (contexto: ContextoOperacionalAtivo) => Promise<ListagemVeiculos>;
+  listarResumo: (contexto: ContextoOperacionalAtivo) => Promise<ListagemResumidaVeiculos>;
   criar: (dados: DadosCriacaoVeiculo) => Promise<Veiculo>;
-  obterPorId: (id: string) => Promise<Veiculo | null>;
-  obterFichaPorId: (id: string) => Promise<{
+  obterPorId: (id: string, contexto: ContextoOperacionalAtivo) => Promise<Veiculo | null>;
+  obterFichaPorId: (id: string, contexto: ContextoOperacionalAtivo) => Promise<{
     veiculo: Veiculo;
     oportunidade: OportunidadeParaVeiculo | null;
   } | null>;
@@ -81,6 +81,7 @@ export type DependenciasVeiculos = {
   marcarDisponivel: (id: string) => Promise<Veiculo | null>;
   obterUsuario: () => Promise<UsuarioAutenticado | null>;
   obterAutoridade: () => Promise<ContextoAcessoAutenticado | null>;
+  obterContextoOperacional: () => Promise<ContextoOperacionalAtivo>;
   exigirVisualizacao: () => Promise<ContextoAcesso>;
   exigirCriacao: () => Promise<ContextoAcesso>;
   exigirAlteracao: () => Promise<ContextoAcesso>;
@@ -99,17 +100,17 @@ export type DependenciasVeiculos = {
     veiculoAnterior: Veiculo,
     veiculoAtualizado: Veiculo
   ) => Promise<void>;
-  listarOportunidadesDisponiveis: () => Promise<readonly OportunidadeDisponivelParaVeiculo[]>;
+  listarOportunidadesDisponiveis: (contexto: ContextoOperacionalAtivo) => Promise<readonly OportunidadeDisponivelParaVeiculo[]>;
 };
 
-async function listarPersistidos(): Promise<ListagemVeiculos> {
+async function listarPersistidos(contexto: ContextoOperacionalAtivo): Promise<ListagemVeiculos> {
   const { listarVeiculosPersistidos } = await import("@/lib/veiculos/veiculos.repository");
-  return listarVeiculosPersistidos();
+  return listarVeiculosPersistidos(undefined, contexto);
 }
 
-async function listarResumoPersistido(): Promise<ListagemResumidaVeiculos> {
+async function listarResumoPersistido(contexto: ContextoOperacionalAtivo): Promise<ListagemResumidaVeiculos> {
   const { listarResumoVeiculosPersistidos } = await import("@/lib/veiculos/veiculos.repository");
-  return listarResumoVeiculosPersistidos();
+  return listarResumoVeiculosPersistidos(undefined, contexto);
 }
 
 async function criarPersistido(dados: DadosCriacaoVeiculo): Promise<Veiculo> {
@@ -117,17 +118,17 @@ async function criarPersistido(dados: DadosCriacaoVeiculo): Promise<Veiculo> {
   return criarVeiculoPersistido(dados);
 }
 
-async function obterPersistidoPorId(id: string): Promise<Veiculo | null> {
+async function obterPersistidoPorId(id: string, contexto: ContextoOperacionalAtivo): Promise<Veiculo | null> {
   const { obterVeiculoPersistidoPorId } = await import("@/lib/veiculos/veiculos.repository");
-  return obterVeiculoPersistidoPorId(id);
+  return obterVeiculoPersistidoPorId(id, undefined, contexto);
 }
 
-async function obterFichaPersistidaPorId(id: string): Promise<{
+async function obterFichaPersistidaPorId(id: string, contexto: ContextoOperacionalAtivo): Promise<{
   veiculo: Veiculo;
   oportunidade: OportunidadeParaVeiculo | null;
 } | null> {
   const { obterFichaVeiculoPersistidaPorId } = await import("@/lib/veiculos/veiculos.repository");
-  return obterFichaVeiculoPersistidaPorId(id);
+  return obterFichaVeiculoPersistidaPorId(id, undefined, contexto);
 }
 
 async function atualizarPersistido(
@@ -177,9 +178,9 @@ async function auditarConclusaoPublicacao(
   return registrarAuditoriaConclusaoPublicacaoVeiculo(veiculoAnterior, veiculoAtualizado);
 }
 
-async function listarOportunidadesDisponiveisPersistidas(): Promise<readonly OportunidadeDisponivelParaVeiculo[]> {
+async function listarOportunidadesDisponiveisPersistidas(contexto: ContextoOperacionalAtivo): Promise<readonly OportunidadeDisponivelParaVeiculo[]> {
   const { listarOportunidadesDisponiveisParaVeiculoPersistidas } = await import("@/lib/veiculos/veiculos.repository");
-  return listarOportunidadesDisponiveisParaVeiculoPersistidas();
+  return listarOportunidadesDisponiveisParaVeiculoPersistidas(undefined, contexto);
 }
 
 const DEPENDENCIAS_PADRAO: DependenciasVeiculos = {
@@ -193,6 +194,7 @@ const DEPENDENCIAS_PADRAO: DependenciasVeiculos = {
   marcarDisponivel: marcarDisponivelPersistido,
   obterUsuario: obterUsuarioAtualAutenticado,
   obterAutoridade: () => obterContextoAcessoAutenticadoAtual(),
+  obterContextoOperacional: async () => (await import("./contexto-operacional.service")).exigirContextoOperacionalAtivoAtual(),
   exigirVisualizacao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_VISUALIZAR),
   exigirCriacao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_CRIAR),
   exigirAlteracao: () => exigirPermissao(CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_ALTERAR),
@@ -235,13 +237,11 @@ function normalizarCamposEditaveis(
 
 function normalizarDados(
   dados: DadosFormularioVeiculo,
-  contexto: ContextoAcesso
+  contexto: ContextoOperacionalAtivo
 ): DadosCriacaoVeiculo {
-  const contextoOperacional = derivarContextoOperacionalAtivo(contexto.vinculo);
-  if (contextoOperacional === null) throw new Error("Acesso não autorizado.");
   return {
-    empresaId: contextoOperacional.empresaId,
-    unidadeId: contextoOperacional.unidadeId,
+    empresaId: contexto.empresaId,
+    unidadeId: contexto.unidadeId,
     oportunidadeId: dados.oportunidadeId.trim(),
     ...normalizarCamposEditaveis(dados),
   };
@@ -253,11 +253,12 @@ function erroUnicidade(error: unknown): boolean {
 
 async function obterVeiculoPorIdComContexto(
   id: string,
-  deps: DependenciasVeiculos
+  deps: DependenciasVeiculos,
+  contexto: ContextoOperacionalAtivo
 ): Promise<Veiculo> {
   try {
 
-    const veiculo = await deps.obterPorId(id);
+    const veiculo = await deps.obterPorId(id, contexto);
 
     if (veiculo === null) throw new Error("nao encontrado");
     return veiculo;
@@ -274,13 +275,14 @@ export async function obterFichaVeiculoPorId(
 
 
   const contexto = await deps.exigirVisualizacao();
+  const contextoOperacional = await deps.obterContextoOperacional();
 
 
 
 
   let fichaPersistida: Awaited<ReturnType<DependenciasVeiculos["obterFichaPorId"]>>;
   try {
-    fichaPersistida = await deps.obterFichaPorId(id);
+    fichaPersistida = await deps.obterFichaPorId(id, contextoOperacional);
   } catch {
     throw new Error("Veículo não encontrado.");
   }
@@ -332,7 +334,8 @@ export async function obterVeiculoPorId(
 ): Promise<Veiculo> {
   const deps = dependencias(complemento);
   await deps.exigirVisualizacao();
-  return obterVeiculoPorIdComContexto(id, deps);
+  const contexto = await deps.obterContextoOperacional();
+  return obterVeiculoPorIdComContexto(id, deps, contexto);
 }
 
 export async function atualizarVeiculo(
@@ -343,10 +346,11 @@ export async function atualizarVeiculo(
   const deps = dependencias(complemento);
   if (await deps.obterUsuario() === null) throw new Error("Acesso não autorizado.");
   await deps.exigirAlteracao();
+  const contextoOperacional = await deps.obterContextoOperacional();
 
   let anterior: Veiculo;
   try {
-    const encontrado = await deps.obterPorId(id);
+    const encontrado = await deps.obterPorId(id, contextoOperacional);
     if (encontrado === null) throw new Error("nao encontrado");
     anterior = encontrado;
   } catch {
@@ -377,10 +381,11 @@ export async function marcarVeiculoProntoParaAnunciar(
   const deps = dependencias(complemento);
   if (await deps.obterUsuario() === null) throw new Error("Acesso não autorizado.");
   await deps.exigirConclusaoPreparacao();
+  const contextoOperacional = await deps.obterContextoOperacional();
 
   let anterior: Veiculo;
   try {
-    const encontrado = await deps.obterPorId(id);
+    const encontrado = await deps.obterPorId(id, contextoOperacional);
     if (encontrado === null) throw new Error("não encontrado");
     anterior = encontrado;
   } catch {
@@ -414,10 +419,11 @@ export async function marcarVeiculoDisponivel(
   const deps = dependencias(complemento);
   if (await deps.obterUsuario() === null) throw new Error("Acesso não autorizado.");
   await deps.exigirConclusaoPublicacao();
+  const contextoOperacional = await deps.obterContextoOperacional();
 
   let anterior: Veiculo;
   try {
-    const encontrado = await deps.obterPorId(id);
+    const encontrado = await deps.obterPorId(id, contextoOperacional);
     if (encontrado === null) throw new Error("não encontrado");
     anterior = encontrado;
   } catch {
@@ -450,10 +456,11 @@ export async function listarVeiculos(
   const deps = dependencias(complemento);
 
   await deps.exigirVisualizacao();
+  const contexto = await deps.obterContextoOperacional();
 
   try {
 
-    const listagem = await deps.listar();
+    const listagem = await deps.listar(contexto);
 
     return listagem;
   } catch {
@@ -474,10 +481,11 @@ export async function abrirListagemVeiculos(
   if (!possuiPermissao(autoridade.contexto, CODIGOS_PERMISSAO_ACESSO.OPORTUNIDADES_VISUALIZAR)) {
     return { estado: "acesso_negado" };
   }
+  const contextoOperacional = await deps.obterContextoOperacional();
 
   let listagem: ListagemResumidaVeiculos;
   try {
-    listagem = await deps.listarResumo();
+    listagem = await deps.listarResumo(contextoOperacional);
   } catch {
     throw new Error("Não foi possível carregar os veículos.");
   }
@@ -515,8 +523,9 @@ export async function listarOportunidadesDisponiveisParaVeiculo(
 ): Promise<OportunidadeParaVeiculo[]> {
   const deps = dependencias(complemento);
   await deps.exigirVisualizacao();
+  const contexto = await deps.obterContextoOperacional();
   try {
-    return [...await deps.listarOportunidadesDisponiveis()];
+    return [...await deps.listarOportunidadesDisponiveis(contexto)];
   } catch {
     throw new Error("Não foi possível carregar as oportunidades.");
   }
@@ -528,7 +537,8 @@ export async function criarVeiculo(
 ): Promise<Veiculo> {
   const deps = dependencias(complemento);
   if (await deps.obterUsuario() === null) throw new Error("Acesso não autorizado.");
-  const contexto = await deps.exigirCriacao();
+  await deps.exigirCriacao();
+  const contexto = await deps.obterContextoOperacional();
   const dados = normalizarDados(dadosFormulario, contexto);
   const validacao = validarDadosCriacaoVeiculo(dados);
   if (!validacao.valido) throw new Error(validacao.mensagem);

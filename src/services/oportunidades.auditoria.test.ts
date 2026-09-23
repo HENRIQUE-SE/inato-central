@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import { listarEventosAuditoria, type RegistroAuditoria } from "@/core/auditoria";
 import { limparEventosAuditoriaParaTestes } from "@/core/auditoria/service";
-import { obterContextoIdentidadeAtual } from "@/core/identidade";
 import { CODIGOS_PERFIL_ACESSO, CODIGOS_PERMISSAO_ACESSO, type ContextoAcesso } from "@/core/acesso";
 import type { Oportunidade } from "@/types/oportunidade";
 import { registrarAuditoriaAlteracaoOportunidade, registrarAuditoriaCriacaoOportunidade, registrarAuditoriaExclusaoOportunidade } from "./oportunidades.auditoria";
@@ -19,10 +18,10 @@ const dependencias = { obterContextoAutenticado: async () => ({ usuario, context
 
 beforeEach(() => { limparEventosAuditoriaParaTestes(); persistidos = []; });
 
-test("criação usa usuário real, contexto, perfil e persiste", async () => {
+test("criação usa usuário real, organização persistida, perfil e persiste", async () => {
   await registrarAuditoriaCriacaoOportunidade(oportunidade, dependencias);
-  const [evento] = persistidos; const contexto = obterContextoIdentidadeAtual();
-  assert.equal(evento.usuarioId, usuario.id); assert.equal(evento.empresaId, contexto.organizacao.empresaId); assert.equal(evento.unidadeId, contexto.organizacao.unidadeId);
+  const [evento] = persistidos;
+  assert.equal(evento.usuarioId, usuario.id); assert.equal(evento.empresaId, oportunidade.empresa_id); assert.equal(evento.unidadeId, oportunidade.unidade_id);
   assert.equal(evento.acao, "criar"); assert.equal(evento.resultado, "sucesso"); assert.equal(evento.origem, "usuario");
   assert.equal(evento.modulo, "oportunidades"); assert.equal(evento.recursoTipo, "oportunidade"); assert.equal(evento.recursoId, oportunidade.id);
   assert.deepEqual(evento.detalhes, { placa: "ABC1D23", proprietario: "Proprietário", veiculo: "Veículo", perfilCodigo: "consultor", usuarioEmail: "usuario@inato.test" });
@@ -32,7 +31,7 @@ test("criação usa usuário real, contexto, perfil e persiste", async () => {
 test("alteração persiste o evento", async () => { await registrarAuditoriaAlteracaoOportunidade(oportunidade, dependencias); assert.equal(persistidos[0].acao, "alterar"); });
 test("exclusão persiste o evento", async () => { await registrarAuditoriaExclusaoOportunidade(oportunidade, dependencias); assert.equal(persistidos[0].acao, "excluir"); });
 
-test("contexto autenticado recebido é reutilizado como organização confiável", async () => {
+test("contexto autenticado recebido reutiliza identidade e preserva organização do recurso", async () => {
   let resolucoes = 0;
   const contextoRecebido = { usuario, contexto: contextoAcesso };
   await registrarAuditoriaCriacaoOportunidade(
@@ -41,8 +40,8 @@ test("contexto autenticado recebido é reutilizado como organização confiável
     contextoRecebido
   );
   assert.equal(resolucoes, 0);
-  assert.equal(persistidos[0].empresaId, contextoAcesso.vinculo.empresaId);
-  assert.equal(persistidos[0].unidadeId, contextoAcesso.vinculo.unidadeId);
+  assert.equal(persistidos[0].empresaId, oportunidade.empresa_id);
+  assert.equal(persistidos[0].unidadeId, oportunidade.unidade_id);
 });
 
 test("usuário ausente mantém evento em memória sem persistir ou criar identificador falso", async () => {

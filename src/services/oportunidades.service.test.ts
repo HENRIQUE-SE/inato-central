@@ -53,6 +53,7 @@ function dependencias(contextoAtual: ContextoAcessoAutenticado | null) {
     obterPayloadAtualizacao: () => payloadAtualizacao,
     deps: {
       obterContexto: async () => contextoAtual,
+      obterContextoOperacional: async () => ({ redeId: "rede-matriz", operacaoId: "operacao-matriz", areaOperacionalId: "area-patrocinio", empresaId: "empresa-a", unidadeId: "unidade-a" }),
       obterPorId: async () => { chamadas.obter += 1; return oportunidade; },
       listar: async () => { chamadas.listar += 1; return { dados: [oportunidade], total: 1 }; },
       criar: async (payload: DadosOportunidade & { empresa_id: string; unidade_id: string }) => { chamadas.criar += 1; payloadCriacao = payload; return oportunidade; },
@@ -111,11 +112,12 @@ test("criação deriva empresa e unidade do contexto, sem autoridade do frontend
   assert.equal(d.chamadas.auditorias, 1);
 });
 
-test("criação recusa vínculo sem unidade operacional", async () => {
+test("criação recusa escopo superior sem contexto operacional selecionado", async () => {
   const c = contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR, todas);
   const semUnidade = { ...c, contexto: { ...c.contexto, vinculo: { ...c.contexto.vinculo, unidadeId: null } } };
   const d = dependencias(semUnidade);
-  await assert.rejects(criarOportunidade(dados, d.deps), /Acesso não autorizado/);
+  d.deps.obterContextoOperacional = async () => { throw new Error("Contexto operacional não selecionado."); };
+  await assert.rejects(criarOportunidade(dados, d.deps), /Contexto operacional não selecionado/);
   assert.equal(d.chamadas.criar, 0);
 });
 
@@ -140,8 +142,8 @@ test("vínculo inativo é bloqueado mesmo que carregue permissão", async () => 
   assert.equal(d.chamadas.excluir, 0);
 });
 
-test("consulta interna por ID preserva a chamada única e delega isolamento à RLS", async () => {
-  const d = dependencias(null);
+test("consulta por ID exige permissão e contexto ativo antes da consulta", async () => {
+  const d = dependencias(contexto(CODIGOS_PERFIL_ACESSO.ADMINISTRADOR, todas));
   assert.equal((await obterOportunidadePorId(oportunidade.id, d.deps))?.id, oportunidade.id);
   assert.equal(d.chamadas.obter, 1);
 });
