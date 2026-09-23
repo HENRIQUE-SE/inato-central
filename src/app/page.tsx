@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import ContextoOperacionalGate from "@/components/contexto-operacional/ContextoOperacionalGate";
 
 const menuItems = [
   { name: "Dashboard", icon: "⌂" },
@@ -46,7 +47,8 @@ export default function Home() {
   const [activeMenu, setActiveMenu] = useState("Dashboard");
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-900">
+    <ContextoOperacionalGate>
+      <main className="min-h-screen bg-slate-100 text-slate-900">
       <div className="flex min-h-screen">
         {/* MENU LATERAL */}
         <aside className="hidden w-72 flex-col bg-slate-950 text-white lg:flex">
@@ -206,6 +208,7 @@ export default function Home() {
           </div>
         </section>
       </div>
-    </main>
+      </main>
+    </ContextoOperacionalGate>
   );
 }

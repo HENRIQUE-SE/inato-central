@@ -118,6 +118,17 @@ test("nova preferência arbitrária nunca é salva", async () => {
   assert.equal(base.chamadas.remover, 1);
 });
 
+test("falha ao persistir preferência não libera contexto como resolvido", async () => {
+  const base = criarDependencias("rede");
+  await assert.rejects(
+    definirPreferenciaContextoOperacionalAtual("unidade-1", {
+      ...base.deps,
+      salvarPreferencia: () => false,
+    }),
+    new Error("Não foi possível salvar a preferência de contexto operacional.")
+  );
+});
+
 test("refresh lógico recupera e revalida novamente a preferência da aba", async () => {
   const base = criarDependencias("rede", { usuarioId: "usuario-1", unidadeId: "unidade-1" });
   await obterContextoOperacionalPreferidoAtual(base.deps);

@@ -100,10 +100,13 @@ export async function definirPreferenciaContextoOperacionalAtual(
 
   const resultado = await resolverPreferencia(unidadeId, deps);
   if (resultado.estado !== "contexto_resolvido") return resultado;
-  deps.salvarPreferencia({
+  const preferenciaSalva = deps.salvarPreferencia({
     usuarioId: autoridade.usuario.id,
     unidadeId: resultado.contexto.unidadeId,
   });
+  if (!preferenciaSalva) {
+    throw new Error("Não foi possível salvar a preferência de contexto operacional.");
+  }
   return resultado;
 }
 

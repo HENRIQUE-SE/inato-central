@@ -1,2 +1,3 @@
 import ReservasContainer from "@/components/reservas/ReservasContainer";
-export default function ReservasPage(){return <ReservasContainer/>;}
+import ContextoOperacionalGate from "@/components/contexto-operacional/ContextoOperacionalGate";
+export default function ReservasPage(){return <ContextoOperacionalGate><ReservasContainer/></ContextoOperacionalGate>;}

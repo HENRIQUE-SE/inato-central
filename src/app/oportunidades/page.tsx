@@ -1,5 +1,6 @@
 import OportunidadesContainer from "@/components/oportunidades/OportunidadesContainer";
+import ContextoOperacionalGate from "@/components/contexto-operacional/ContextoOperacionalGate";
 
 export default function OportunidadesPage() {
-  return <OportunidadesContainer />;
+  return <ContextoOperacionalGate><OportunidadesContainer /></ContextoOperacionalGate>;
 }

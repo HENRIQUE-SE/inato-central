@@ -1,5 +1,6 @@
 import VeiculosContainer from "@/components/veiculos/VeiculosContainer";
+import ContextoOperacionalGate from "@/components/contexto-operacional/ContextoOperacionalGate";
 
 export default function VeiculosPage() {
-  return <VeiculosContainer />;
+  return <ContextoOperacionalGate><VeiculosContainer /></ContextoOperacionalGate>;
 }
