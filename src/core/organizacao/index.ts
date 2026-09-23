@@ -10,6 +10,7 @@ export type {
   ContextoOrganizacional,
   ContextoOperacionalAtivo,
   Empresa,
+  PreferenciaContextoOperacional,
   SelecaoContextoOperacional,
   Unidade,
   UnidadeOperacionalPermitida,

@@ -8,8 +8,8 @@ $exitCode = 0
 $files = @(
   (Join-Path $srcRoot "core\organizacao\constants.ts"), (Join-Path $srcRoot "core\organizacao\types.ts"), (Join-Path $srcRoot "core\organizacao\data.ts"), (Join-Path $srcRoot "core\organizacao\service.ts"), (Join-Path $srcRoot "core\organizacao\index.ts"),
   (Join-Path $srcRoot "core\acesso\constants.ts"), (Join-Path $srcRoot "core\acesso\types.ts"), (Join-Path $srcRoot "core\acesso\service.ts"), (Join-Path $srcRoot "core\acesso\index.ts"), (Join-Path $srcRoot "core\acesso\service.test.ts"),
-  (Join-Path $srcRoot "lib\supabase.ts"), (Join-Path $srcRoot "lib\auth\auth.repository.ts"), (Join-Path $srcRoot "lib\acesso\acesso.repository.ts"), (Join-Path $srcRoot "lib\acesso\acesso.repository.test.ts"), (Join-Path $srcRoot "lib\organizacao\organizacao.repository.ts"), (Join-Path $srcRoot "lib\organizacao\organizacao.repository.test.ts"), (Join-Path $srcRoot "lib\organizacao\autoridade-operacional.migration.test.ts"),
-  (Join-Path $srcRoot "services\auth.service.ts"), (Join-Path $srcRoot "services\acesso.service.ts"), (Join-Path $srcRoot "services\acesso.service.test.ts")
+  (Join-Path $srcRoot "lib\supabase.ts"), (Join-Path $srcRoot "lib\auth\auth.repository.ts"), (Join-Path $srcRoot "lib\acesso\acesso.repository.ts"), (Join-Path $srcRoot "lib\acesso\acesso.repository.test.ts"), (Join-Path $srcRoot "lib\organizacao\organizacao.repository.ts"), (Join-Path $srcRoot "lib\organizacao\organizacao.repository.test.ts"), (Join-Path $srcRoot "lib\organizacao\autoridade-operacional.migration.test.ts"), (Join-Path $srcRoot "lib\organizacao\preferencia-contexto-operacional.repository.ts"), (Join-Path $srcRoot "lib\organizacao\preferencia-contexto-operacional.repository.test.ts"),
+  (Join-Path $srcRoot "services\auth.service.ts"), (Join-Path $srcRoot "services\acesso.service.ts"), (Join-Path $srcRoot "services\acesso.service.test.ts"), (Join-Path $srcRoot "services\contexto-operacional.service.ts"), (Join-Path $srcRoot "services\contexto-operacional.service.test.ts")
 )
 try {
   if (-not (Test-Path -LiteralPath $tscPath -PathType Leaf)) { throw "TypeScript local não encontrado." }
@@ -24,7 +24,7 @@ try {
   $aliasLib = Join-Path $tempRoot "node_modules\@\lib"
   New-Item -ItemType Directory -Path $aliasLib | Out-Null
   Copy-Item -Path (Join-Path $tempRoot "lib\*") -Destination $aliasLib -Recurse
-  & node --test (Join-Path $tempRoot "core\acesso\service.test.js") (Join-Path $tempRoot "lib\acesso\acesso.repository.test.js") (Join-Path $tempRoot "lib\organizacao\organizacao.repository.test.js") (Join-Path $tempRoot "lib\organizacao\autoridade-operacional.migration.test.js") (Join-Path $tempRoot "services\acesso.service.test.js")
+  & node --test (Join-Path $tempRoot "core\acesso\service.test.js") (Join-Path $tempRoot "lib\acesso\acesso.repository.test.js") (Join-Path $tempRoot "lib\organizacao\organizacao.repository.test.js") (Join-Path $tempRoot "lib\organizacao\autoridade-operacional.migration.test.js") (Join-Path $tempRoot "lib\organizacao\preferencia-contexto-operacional.repository.test.js") (Join-Path $tempRoot "services\acesso.service.test.js") (Join-Path $tempRoot "services\contexto-operacional.service.test.js")
   if ($LASTEXITCODE -ne 0) { throw "Os testes de acesso falharam." }
 } catch { Write-Host $_ -ForegroundColor Red; $exitCode = 1 }
 finally { if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force } }

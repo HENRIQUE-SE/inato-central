@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CODIGOS_PERFIL_ACESSO, CODIGOS_PERMISSAO_ACESSO, type ContextoAcesso } from "@/core/acesso";
-import { contextoOperacionalSolicitadoEhPermitido, exigirPermissao, obterContextoAcessoAtual, obterContextoAcessoAutenticadoAtual, obterContextoOperacionalAtivoAtual, obterUnidadesOperacionaisPermitidasAtuais, resolverContextoOperacionalAtivoAtual, usuarioAtualPossuiPermissao } from "./acesso.service";
+import { contextoOperacionalSolicitadoEhPermitido, ehErroSelecaoContextoOperacionalNaoAutorizada, exigirPermissao, obterContextoAcessoAtual, obterContextoAcessoAutenticadoAtual, obterContextoOperacionalAtivoAtual, obterUnidadesOperacionaisPermitidasAtuais, resolverContextoOperacionalAtivoAtual, usuarioAtualPossuiPermissao } from "./acesso.service";
 import type { SelecaoContextoOperacional } from "@/core/organizacao";
 
 const contexto: ContextoAcesso = {
@@ -83,7 +83,7 @@ test("escopo Unidade válido resolve automaticamente sem consultar seleção", a
   assert.equal(consultas, 0);
 });
 test("escopo Unidade não pode trocar de Unidade por seleção externa", async () => {
-  await assert.rejects(resolverContextoOperacionalAtivoAtual({ unidadeId: "outra" }, dependencias, async () => unidadeReal), new Error("Seleção de contexto não autorizada."));
+  await assert.rejects(resolverContextoOperacionalAtivoAtual({ unidadeId: "outra" }, dependencias, async () => unidadeReal), ehErroSelecaoContextoOperacionalNaoAutorizada);
 });
 for (const escopo of ["area_operacional", "operacao", "rede"] as const) {
   test(`escopo ${escopo} sem seleção não produz contexto nem escolhe lista ordenada`, async () => {
@@ -101,7 +101,7 @@ for (const escopo of ["area_operacional", "operacao", "rede"] as const) {
     });
   });
   test(`escopo ${escopo} não revela Unidade ausente ou fora da autoridade`, async () => {
-    await assert.rejects(resolverContextoOperacionalAtivoAtual({ unidadeId: "fora" }, dependenciasDeEscopo(escopo), async () => null), new Error("Seleção de contexto não autorizada."));
+    await assert.rejects(resolverContextoOperacionalAtivoAtual({ unidadeId: "fora" }, dependenciasDeEscopo(escopo), async () => null), ehErroSelecaoContextoOperacionalNaoAutorizada);
   });
 }
 test("somente unidadeId é consumido e ancestrais externos não substituem dados persistidos", async () => {
@@ -112,7 +112,7 @@ test("somente unidadeId é consumido e ancestrais externos não substituem dados
 });
 test("seleção vazia falha sem consultar território", async () => {
   let consultas = 0;
-  await assert.rejects(resolverContextoOperacionalAtivoAtual({ unidadeId: "   " }, dependenciasDeEscopo("rede"), async () => { consultas += 1; return null; }), new Error("Seleção de contexto não autorizada."));
+  await assert.rejects(resolverContextoOperacionalAtivoAtual({ unidadeId: "   " }, dependenciasDeEscopo("rede"), async () => { consultas += 1; return null; }), ehErroSelecaoContextoOperacionalNaoAutorizada);
   assert.equal(consultas, 0);
 });
 test("erro de infraestrutura territorial não é convertido em seleção inválida", async () => {

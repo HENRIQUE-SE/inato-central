@@ -20,6 +20,19 @@ async function obterContextoPersistido(usuarioId: string): Promise<ContextoAcess
 const DEPENDENCIAS_PADRAO: DependenciasAcesso = { obterUsuario: obterUsuarioAtualAutenticado, obterContextoPersistido };
 const contextosEmResolucao = new WeakMap<DependenciasAcesso, Promise<ContextoAcessoAutenticado | null>>();
 
+export class ErroSelecaoContextoOperacionalNaoAutorizada extends Error {
+  constructor() {
+    super("Seleção de contexto não autorizada.");
+    this.name = "ErroSelecaoContextoOperacionalNaoAutorizada";
+  }
+}
+
+export function ehErroSelecaoContextoOperacionalNaoAutorizada(
+  erro: unknown
+): erro is ErroSelecaoContextoOperacionalNaoAutorizada {
+  return erro instanceof ErroSelecaoContextoOperacionalNaoAutorizada;
+}
+
 async function resolverContextoAcesso(dependencias: DependenciasAcesso): Promise<ContextoAcessoAutenticado | null> {
   try {
     const usuario = await dependencias.obterUsuario();
@@ -93,17 +106,17 @@ export async function resolverContextoOperacionalAtivoAtual(
   const contextoAutomatico = derivarContextoOperacionalAtivo(contexto.vinculo);
   if (contextoAutomatico !== null) {
     if (selecao !== undefined && selecao.unidadeId !== contextoAutomatico.unidadeId) {
-      throw new Error("Seleção de contexto não autorizada.");
+      throw new ErroSelecaoContextoOperacionalNaoAutorizada();
     }
     return contextoAutomatico;
   }
 
   if (selecao === undefined) return null;
   const unidadeId = selecao.unidadeId.trim();
-  if (!unidadeId) throw new Error("Seleção de contexto não autorizada.");
+  if (!unidadeId) throw new ErroSelecaoContextoOperacionalNaoAutorizada();
 
   const unidade = await obter(contexto.vinculo, unidadeId);
-  if (unidade === null) throw new Error("Seleção de contexto não autorizada.");
+  if (unidade === null) throw new ErroSelecaoContextoOperacionalNaoAutorizada();
   return criarContextoOperacionalDaUnidade(unidade);
 }
 
