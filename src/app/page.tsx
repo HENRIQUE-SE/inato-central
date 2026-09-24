@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import ContextoOperacionalGate from "@/components/contexto-operacional/ContextoOperacionalGate";
+import IdentidadeUsuarioAtual from "@/components/auth/IdentidadeUsuarioAtual";
 
 const menuItems = [
   { name: "Dashboard", icon: "⌂" },
@@ -110,16 +111,7 @@ export default function Home() {
               </h1>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="hidden text-right sm:block">
-                <p className="text-sm font-semibold">Perfil TESTE</p>
-                <p className="text-xs text-slate-500">Usuário de treinamento</p>
-              </div>
-
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-white">
-                T
-              </div>
-            </div>
+            <IdentidadeUsuarioAtual />
           </header>
 
           {/* CONTEÚDO */}

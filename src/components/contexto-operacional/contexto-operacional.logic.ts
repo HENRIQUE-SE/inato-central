@@ -2,6 +2,7 @@ import type {
   ContextoOperacionalAtivo,
   UnidadeOperacionalPermitida,
 } from "@/core/organizacao";
+import { CODIGOS_ESCOPO_ACESSO, type CodigoEscopoAcesso } from "@/core/acesso";
 import type { ResultadoContextoOperacionalAtivo } from "@/services/contexto-operacional.service";
 
 export type ContextoResolvidoVisual = {
@@ -114,4 +115,8 @@ export function deveRecarregarPaginaAposSelecao(
   contextoAnterior: ContextoResolvidoVisual | null
 ): boolean {
   return estado.estado === "contexto_resolvido" && contextoAnterior !== null;
+}
+
+export function escopoPermiteTrocaUnidade(escopoTipo: CodigoEscopoAcesso): boolean {
+  return escopoTipo !== CODIGOS_ESCOPO_ACESSO.UNIDADE;
 }

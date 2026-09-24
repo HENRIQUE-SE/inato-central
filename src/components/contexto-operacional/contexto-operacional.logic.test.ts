@@ -7,6 +7,7 @@ import type { ResultadoContextoOperacionalAtivo } from "@/services/contexto-oper
 import {
   childrenPodemSerMontados,
   deveRecarregarPaginaAposSelecao,
+  escopoPermiteTrocaUnidade,
   resolverEstadoContextoOperacional,
   selecionarContextoOperacional,
   type ContextoResolvidoVisual,
@@ -173,4 +174,34 @@ test("Auditoria deixa a identificação visual da Unidade exclusivamente para o 
   assert.doesNotMatch(usuarioAtual, /Unidade:/);
   assert.match(auditoria, /<UsuarioAtual\s+\{\.\.\.usuarioVisivel\}/);
   assert.match(unidadeAtiva, /Unidade ativa/);
+});
+
+test("escopo Unidade não permite exibir Trocar unidade", () => {
+  assert.equal(escopoPermiteTrocaUnidade("unidade"), false);
+});
+
+for (const escopo of ["area_operacional", "operacao", "rede"] as const) {
+  test(`escopo ${escopo} permite exibir Trocar unidade`, () => {
+    assert.equal(escopoPermiteTrocaUnidade(escopo), true);
+  });
+}
+
+test("regra de troca depende do escopo e não da quantidade de Unidades", () => {
+  const catalogoComUmaUnidade = [unidade];
+  assert.equal(catalogoComUmaUnidade.length, 1);
+  assert.equal(escopoPermiteTrocaUnidade("rede"), true);
+  assert.equal(escopoPermiteTrocaUnidade("unidade"), false);
+});
+
+test("ocultar troca não altera resolução automática do escopo Unidade", async () => {
+  const base = dependencias({ estado: "contexto_resolvido", contexto });
+  const estado = await resolverEstadoContextoOperacional(base.deps);
+  assert.equal(childrenPodemSerMontados(estado), true);
+  assert.equal(escopoPermiteTrocaUnidade("unidade"), false);
+});
+
+test("UnidadeAtiva condiciona a ação ao escopo resolvido", () => {
+  const fonte = readFileSync(resolve("src/components/contexto-operacional/UnidadeAtiva.tsx"), "utf8");
+  assert.match(fonte, /permiteTroca\s*&&/);
+  assert.doesNotMatch(fonte, /unidades\.length/);
 });

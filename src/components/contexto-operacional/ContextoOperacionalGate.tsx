@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { obterUnidadesOperacionaisPermitidasAtuais } from "@/services/acesso.service";
+import {
+  obterContextoAcessoAutenticadoAtual,
+  obterUnidadesOperacionaisPermitidasAtuais,
+} from "@/services/acesso.service";
 import {
   definirPreferenciaContextoOperacionalAtual,
   obterContextoOperacionalPreferidoAtual,
@@ -12,6 +15,7 @@ import UnidadeAtiva from "./UnidadeAtiva";
 import {
   childrenPodemSerMontados,
   deveRecarregarPaginaAposSelecao,
+  escopoPermiteTrocaUnidade,
   resolverEstadoContextoOperacional,
   selecionarContextoOperacional,
   type ContextoResolvidoVisual,
@@ -29,14 +33,27 @@ export default function ContextoOperacionalGate({ children }: { readonly childre
   const router = useRouter();
   const [estado, setEstado] = useState<EstadoContextoOperacionalVisual>({ estado: "carregando" });
   const [processando, setProcessando] = useState(false);
+  const [permiteTroca, setPermiteTroca] = useState(false);
   const envioEmAndamento = useRef(false);
 
   useEffect(() => {
     let ativo = true;
-    resolverEstadoContextoOperacional(DEPENDENCIAS).then((resultado) => {
+    Promise.all([
+      resolverEstadoContextoOperacional(DEPENDENCIAS),
+      obterContextoAcessoAutenticadoAtual(),
+    ]).then(([resultado, autoridade]) => {
       if (!ativo) return;
       if (resultado.estado === "nao_autenticado") router.replace("/login");
+      setPermiteTroca(
+        autoridade !== null && escopoPermiteTrocaUnidade(autoridade.contexto.vinculo.escopoTipo)
+      );
       setEstado(resultado);
+    }).catch((erro: unknown) => {
+      if (!ativo) return;
+      setEstado({
+        estado: "erro_infraestrutura",
+        mensagem: erro instanceof Error ? erro.message : "Não foi possível resolver o contexto operacional.",
+      });
     });
     return () => { ativo = false; };
   }, [router]);
@@ -108,7 +125,11 @@ export default function ContextoOperacionalGate({ children }: { readonly childre
   if (!childrenPodemSerMontados(estado)) return null;
   return (
     <>
-      <UnidadeAtiva unidade={estado.unidade} aoTrocar={() => trocarUnidade(estado)} />
+      <UnidadeAtiva
+        unidade={estado.unidade}
+        permiteTroca={permiteTroca}
+        aoTrocar={() => trocarUnidade(estado)}
+      />
       {children}
     </>
   );
